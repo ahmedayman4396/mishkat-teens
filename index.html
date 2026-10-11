@@ -117,6 +117,22 @@
     .not-rated { margin-top: 12px; font-size: 13px; color: var(--muted); background: #f4f6f8; padding: 8px 10px; border-radius: 8px; }
     .notes { margin-top: 12px; }
 
+    .proj { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f6f9fc; border: 1px solid #e3ebf2; }
+    .proj-title { font-weight: 600; font-size: 14px; color: var(--blue); margin-bottom: 8px; }
+    .proj-title small { color: var(--muted); font-weight: normal; }
+    .pchips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pchip { flex: 1 1 22%; min-width: 64px; padding: 9px 4px; font-size: 13.5px; border: 2px solid #e6eaee; border-radius: 10px;
+      background: #fff; cursor: pointer; font-family: inherit; color: #555; transition: all .15s; }
+    .pchip.on[data-v="لم يبدأ"] { background: #95a5a6; border-color: #95a5a6; color: #fff; }
+    .pchip.on[data-v="جاري"] { background: var(--l2); border-color: var(--l2); color: #fff; }
+    .pchip.on[data-v="سلّم"] { background: var(--l3); border-color: var(--l3); color: #fff; }
+    .pchip.on[data-v="متعثر"] { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .proj .crit { margin-top: 10px; }
+    .proj .crit-title { font-size: 13px; }
+    .proj .lvl { padding: 6px 4px; }
+    .proj .lvl b { font-size: 16px; }
+    .coord-link { display: block; margin-top: 16px; font-size: 13px; color: var(--muted); }
+
     .class-card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; text-align: right;
       box-shadow: 0 2px 10px rgba(0,0,0,.05); border: 2px dashed var(--blue); transition: border-color .2s; }
     .class-card.done { border: 2px solid var(--green); }
@@ -175,6 +191,7 @@
       </div>
       <button class="btn" id="login-btn" type="button">تسجيل الدخول 🚀</button>
       <div class="msg" id="login-msg"></div>
+      <a class="coord-link" href="coordinator.html">دخول المنسق ←</a>
     </div>
 
     <!-- اختيار الفصل -->
@@ -272,6 +289,13 @@
     ];
 
     var TASK_KEYS = ['newsletter', 'encourage', 'reviewLinks'];
+    var PROJECT_STATUSES = ['لم يبدأ', 'جاري', 'سلّم', 'متعثر'];
+    var PROJECT_DONE = 'سلّم';
+    var PROJECT_DIMS = [
+      { key: 'knowledge', title: 'المعرفة' }, { key: 'understanding', title: 'الفهم' },
+      { key: 'character', title: 'الخُلق' }, { key: 'practice', title: 'الممارسة' }, { key: 'impact', title: 'الأثر' }
+    ];
+    var PROJECT_LEVELS = ['يحتاج دعم', 'جيد', 'متميز'];
     function emptyTasks() { var o = {}; TASK_KEYS.forEach(function (k) { o[k] = ''; }); return o; }
 
     var state = { coachCode: '', coachName: '', week: '', className: '', students: [], classInfo: emptyTasks() };
@@ -419,8 +443,12 @@
         if (!res.students.length) { Sound.play('error'); setError('classes-msg', 'لا يوجد طلاب مسجلين في هذا الفصل'); return; }
 
         state.className = cls; state.week = res.week;
+        state.project = res.project || null;
+        var prev = res.projectStatus || {};
         state.students = res.students.map(function (n) {
-          return { name: n, att: 'حاضر', scores: {}, notes: '' };
+          var p = prev[n] || {};
+          return { name: n, att: 'حاضر', scores: {}, notes: '',
+                   proj: { status: p.status || '', scores: Object.assign({}, p.scores || {}) } };
         });
         state.classInfo = res.classInfo || emptyTasks();
         state.submitted = !!res.alreadySubmitted;
@@ -442,8 +470,32 @@
 
     // ================= عرض بطاقات الطلاب =================
     function isRated(s) { return RATED.indexOf(s.att) !== -1; }
+    function projComplete(s) {
+      if (!state.project) return true;
+      if (!s.proj.status) return false;
+      return s.proj.status !== PROJECT_DONE || PROJECT_DIMS.every(function (d) { return !!s.proj.scores[d.key]; });
+    }
     function isComplete(s) {
-      return !isRated(s) || CRITERIA.every(function (c) { return !!s.scores[c.key]; });
+      var evalDone = !isRated(s) || CRITERIA.every(function (c) { return !!s.scores[c.key]; });
+      return evalDone && projComplete(s);
+    }
+
+    function projectHTML(s) {
+      if (!state.project) return '';
+      var chips = PROJECT_STATUSES.map(function (v) {
+        return '<button type="button" class="pchip' + (s.proj.status === v ? ' on' : '') + '" data-act="pstatus" data-v="' + v + '">' + v + '</button>';
+      }).join('');
+      var dims = s.proj.status === PROJECT_DONE ? PROJECT_DIMS.map(function (d) {
+        var lv = PROJECT_LEVELS.map(function (l, k) {
+          var v = k + 1;
+          return '<button type="button" class="lvl' + (s.proj.scores[d.key] === v ? ' on' : '') +
+                 '" data-act="pscore" data-c="' + d.key + '" data-v="' + v + '"><b>' + v + '</b>' + l + '</button>';
+        }).join('');
+        return '<div class="crit"><div class="crit-title">' + d.title + '</div><div class="levels">' + lv + '</div></div>';
+      }).join('') : '';
+      var due = state.project.due ? ' <small>(التسليم: ' + esc(state.project.due) + ')</small>' : '';
+      return '<div class="proj"><div class="proj-title">🎯 مشروع: ' + esc(state.project.name) + due + '</div>' +
+             '<div class="pchips">' + chips + '</div>' + dims + '</div>';
     }
 
     function cardHTML(i) {
@@ -468,6 +520,7 @@
                '<div class="student-head"><h4>' + esc(s.name) + '</h4><span class="tick">✓</span></div>' +
                '<div class="chips">' + att + '</div>' +
                ratings +
+               projectHTML(s) +
                '<input type="text" class="notes" data-act="notes" placeholder="ملاحظات إضافية (اختياري)..." value="' + esc(s.notes) + '">' +
              '</div>';
     }
@@ -495,13 +548,15 @@
 
       if (act === 'att') s.att = b.dataset.v;
       else if (act === 'score') s.scores[b.dataset.c] = +b.dataset.v;
+      else if (act === 'pstatus') s.proj.status = b.dataset.v;
+      else if (act === 'pscore') s.proj.scores[b.dataset.c] = +b.dataset.v;
       else s[act] = !s[act];
 
       card.outerHTML = cardHTML(i);
       updateProgress();
 
       if (!wasComplete && isComplete(s)) { Sound.play('card'); vibrate(20); }
-      else Sound.play(act === 'score' ? 'level' + b.dataset.v : 'tap');
+      else Sound.play(act === 'score' || act === 'pscore' ? 'level' + b.dataset.v : 'tap');
     });
 
     function classDone() { return TASK_KEYS.every(function (k) { return !!state.classInfo[k]; }); }
@@ -552,7 +607,7 @@
         var el = $('st_' + missing);
         el.classList.remove('missing'); void el.offsetWidth; el.classList.add('missing');
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        toast('باقي تقييم ناقص للطالب: ' + state.students[missing].name);
+        toast((projComplete(state.students[missing]) ? 'باقي تقييم ناقص للطالب: ' : 'حدد حالة المشروع للطالب: ') + state.students[missing].name);
         return;
       }
 
@@ -577,7 +632,8 @@
           tajweed:     r ? s.scores.tajweed : '',
           interaction: r ? s.scores.interaction : '',
           behavior:    r ? s.scores.behavior : '',
-          notes: s.notes.trim()
+          notes: s.notes.trim(),
+          project: state.project ? { status: s.proj.status, scores: s.proj.status === PROJECT_DONE ? s.proj.scores : {} } : null
         };
       });
 
