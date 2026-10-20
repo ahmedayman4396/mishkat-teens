@@ -218,6 +218,7 @@ function renderSession() {
     '<div class="panel"><div class="row"><div><h3 style="margin:0">' + esc(r.cls) + (r.mode === 'بديل' ? ' <span class="pill wait">بديل</span>' : '') + '</h3>' +
     '<div class="sub" style="margin:2px 0 0">' + esc(r.program) + ' • ' + esc(r.level || '') + ' • ' + esc(r.term.name) + '</div></div>' +
     '<button class="btn sm sec" type="button" data-act="history" style="flex:0 0 auto">🗂️ تقييماتي السابقة</button></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn sm' + (s.mid || s.final ? '' : ' sec') + '" type="button" data-act="exam">📝 الميد / الفاينال</button><button class="btn sm sec" type="button" data-act="self">🙋 التقييم الذاتي</button></div>' +
     '<div class="f" style="margin:10px 0 0"><select id="sess">' + r.sessions.map(function (x) { return '<option value="' + x.n + '"' + (x.n === s.n ? ' selected' : '') + (x.status === 'cancelled' ? ' disabled' : '') + '>' + sessionLabel(x) + '</option>'; }).join('') + '</select></div></div>';
   var info = '';
   if (s.family) info += '<div class="info">🏠 الأسبوع ده فيه نشاط أسرة — علّم لكل طالب عمله ولا لأ.</div>';
@@ -299,6 +300,8 @@ function bindSession() {
     var a = b.dataset.act, row = b.dataset.s ? rowOf(b.dataset.s) : null;
     if (a === 'home') { coachHome(); return; }
     if (a === 'history') { history(); return; }
+    if (a === 'exam' || a === 'self') { var rc = ST.s.cls, rs = ST.sub, bk = function () { openSession(rc, null, rs); };
+      if (a === 'exam') openExam(rc, '', bk, rs); else openSelf(rc, '', bk, rs); return; }
     if (a === 'att') { row.att = b.dataset.v; }
     else if (a === 'age') { ST.openAge = ST.openAge === b.dataset.s ? null : b.dataset.s; }
     else if (a === 'score') { row.scores[b.dataset.c] = b.dataset.v === 'na' ? ME.notObserved : Number(b.dataset.v); Sound.play(b.dataset.v === 'na' ? 'tap' : 'lv' + b.dataset.v); updateStudent(b.dataset.s); return; }
@@ -437,6 +440,11 @@ function followClass(cls) {
     var done = d.sessions.filter(function (s) { return s.status === 'done'; });
     var h = '<button class="back" type="button" data-a="back">→ رجوع للوحة</button><div class="panel"><h3>' + esc(d.cls) + '</h3><div class="sub">' + esc(d.level || '') + ' • ' + esc(d.term) + ' • 👤 ' + esc(d.coaches.join(' • ')) + '</div>' +
       '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 تقييم زيارة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء حلقة</button></div></div>';
+    if (d.examSummary) { var es = d.examSummary;
+      h += '<div class="panel"><h3>📝 الاختبارات والتقييم الذاتي</h3><div class="line"><span class="k">الاختبارات</span>' + Object.keys(es.exams).map(function (k) { var x = es.exams[k];
+          return '<span class="pill ' + (x.done >= x.total && x.total ? 'ok' : x.done ? 'wait' : '') + '">' + esc(k) + ' ' + x.done + '/' + x.total + '</span>'; }).join('') + '</div>' +
+        '<div class="line"><span class="k">ذاتي</span>' + Object.keys(es.self).map(function (k) { return '<span class="pill ' + (es.self[k] >= es.students && es.students ? 'ok' : es.self[k] ? 'wait' : '') + '">' + esc(k) + ' ' + es.self[k] + '/' + es.students + '</span>'; }).join('') + '</div>' +
+        '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-a="exam">📝 الميد / الفاينال</button><button class="btn sm sec" type="button" data-a="self">🙋 التقييم الذاتي</button></div></div>'; }
     if (d.pending.length) h += '<div class="panel"><h3>🆕 طلاب مستنيين تأكيد</h3>' + d.pending.map(function (p) {
       return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span><span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span></div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>👥 الطلاب (' + d.students.filter(function (s) { return s.status !== 'منسحب' && s.status !== 'مرفوض'; }).length + ')</h3>' + d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
@@ -456,6 +464,8 @@ function followClass(cls) {
         call('setEnrollment', [ME.code, cls, b.dataset.c, 'birth', v.trim()], function (r) { Sound.play('ok'); toast(r.age ? 'اتسجل — ' + r.age + ' سنين' : 'اتمسح'); followClass(cls); }); }
       else if (a === 'sess') followSession(cls, Number(b.dataset.n));
       else if (a === 'visit') visitForm(cls);
+      else if (a === 'exam') openExam(cls, '', function () { followClass(cls); }, false);
+      else if (a === 'self') openSelf(cls, '', function () { followClass(cls); }, false);
       else if (a === 'cancel') { var x = prompt('رقم الحلقة اللي هتتلغي:'); if (!x) return; var why = prompt('السبب (إجازة، ظرف…):') || 'ملغية';
         call('cancelSession', [ME.code, cls, x, why, false], function () { toast('اتلغت 🚫'); followClass(cls); }); }
       else if (a === 'vsc') { ST.visit[b.dataset.c] = Number(b.dataset.v); [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); Sound.play('lv' + b.dataset.v); }
@@ -507,12 +517,204 @@ function report(code) {
       '<div class="line">' + Object.keys(a).map(function (k) { return '<span class="pill">' + k + ' ' + a[k] + '</span>'; }).join('') + '</div>' +
       '<h3 style="margin-top:14px">📈 المتوسطات (من 5)</h3>' + bars + '<div class="sub">▲▼ = الفرق بين أول ' + r.minRatings + ' تقييمات وآخر ' + r.minRatings + '. «لم يُلاحظ» مش داخل في المتوسط.</div>' +
       '<div class="line">' + ME.followups.map(function (f) { var x = r.follow[f[0]]; return '<span class="pill">' + f[1] + ': ' + (x.total ? x.done + '/' + x.total : '—') + '</span>'; }).join('') + '</div>' +
+      examReportHTML(r.exam) +
       '<h3 style="margin-top:14px">🗓️ آخر الحلقات</h3><div class="tw"><table><thead><tr><th>ح</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       r.sessions.map(function (s) { return '<tr><td>' + s.n + '</td><td>' + esc(s.att) + (s.guestFrom ? '*' : '') + '</td>' + r.criteria.map(function (c) { return '<td>' + sc(s[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
       (r.behavior.length ? '<h3 style="margin-top:14px">⚑ ملاحظات سلوكية</h3>' + r.behavior.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') +
       (r.notes.length ? '<h3 style="margin-top:14px">📝 ملاحظات المربين</h3>' + r.notes.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') + '</div>';
     $('fbox').scrollIntoView({ behavior: 'smooth' });
   }, function (e) { $('fbox').innerHTML = '<div class="panel empty">' + esc(e.message) + '</div>'; });
+}
+
+// ======================================================================
+//                    الميد والفاينال + التقييم الذاتي
+// ======================================================================
+function lvRow(label, code, key, val, levels, act, labels) {
+  var b = [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" data-x="' + act + '" data-s="' + esc(code) + '" data-k="' + esc(key) + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '"' + (labels ? ' style="font-size:11.5px;font-weight:normal"' : '') + '>' + (labels ? esc(labels[v - 1]) : v) + '</button>'; }).join('');
+  var d = levels && Number(val) >= 1 ? levels[Number(val) - 1] : '';
+  return '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(label) + '</div><div class="lv">' + b + '</div></div>' + (d ? '<div class="desc">' + esc(d) + '</div>' : '') + '</div>';
+}
+function stHead(st, open, pill) {
+  return '<div class="st-h" data-x="open" data-s="' + esc(st.code) + '" style="cursor:pointer"><b>' + (open ? '▾ ' : '▸ ') + esc(st.name) + '</b><span>' + pill +
+    ' <span class="pill ' + (st.ageEstimated || !st.age ? 'wait' : 'c') + '">👶 ' + (st.age ? st.age + (st.ageEstimated ? '~' : '') : '؟') + '</span></span></div>';
+}
+function nextOpen(students, saved, cur) {
+  var i = students.map(function (s) { return s.code; }).indexOf(cur);
+  var rest = students.slice(i + 1).concat(students.slice(0, i + 1));
+  var n = rest.filter(function (s) { return !saved[s.code]; })[0];
+  return n ? n.code : null;
+}
+
+// ---------- الاختبار ----------
+function openExam(cls, exam, back, sub, openCode) {
+  loading();
+  if (back) { ST.exBack = back; ST.exSub = !!sub; }
+  call('examForm', [ME.code, cls, exam || '', ST.exSub], function (d) {
+    if (d.evaluators.indexOf(d.defaultContentEval) === -1) d.evaluators.unshift(d.defaultContentEval);
+    ST.ex = { d: d, rows: {}, open: openCode === undefined ? null : openCode };
+    d.students.forEach(function (s) { ST.ex.rows[s.code] = { att: 'حاضر', q: [], g: {}, contentEval: d.defaultContentEval, quranEval: d.defaultContentEval, notes: '' }; });
+    renderExam(); if (ST.ex.open) scrollToSt(ST.ex.open);
+  }, function (e) { failed(e); ST.exBack(); });
+}
+function scrollToSt(code) { var el = document.querySelector('.st[data-st="' + CSS.escape(code) + '"]'); if (el) el.scrollIntoView({ block: 'start' }); }
+function renderExam() {
+  var d = ST.ex.d, done = Object.keys(d.saved).length;
+  var h = '<button class="back" type="button" data-x="back">→ رجوع</button><div class="panel"><div class="row"><div><h3 style="margin:0">📝 ' + esc(d.cls) + '</h3>' +
+    '<div class="sub" style="margin:2px 0 0">' + esc(d.term) + ' • الميد أسبوع ' + (d.week.mid || '—') + ' • الفاينال أسبوع ' + (d.week.final || '—') + '</div></div>' +
+    '<select id="exsel" style="width:auto;flex:0 0 auto">' + opts(d.exams, d.exam) + '</select></div>' +
+    '<div class="line"><span class="pill ' + (done === d.students.length ? 'ok' : 'wait') + '">اتسجل ' + done + ' من ' + d.students.length + '</span>' +
+    '<span class="pill">' + d.tpl.questions + (d.tpl.questions === 1 ? ' سؤال' : ' أسئلة') + ' محتوى</span>' + (d.tpl.surah ? '<span class="pill c">' + esc(d.tpl.surah) + '</span>' : '') + '</div>' +
+    '<div class="sub" style="margin:6px 0 0">اضغط على اسم الطالب علشان تفتح اختباره. كل طالب بيتحفظ لوحده، والأوصاف على حسب سنه.</div></div>';
+  main(h + d.students.map(examStudentHTML).join('')); bindExam();
+}
+function quranCrit(b) { return b.quran.filter(function (c) { return b.quranKeys.indexOf(c.key) !== -1; }); }
+function examStudentHTML(st) {
+  var x = ST.ex, d = x.d, sv = d.saved[st.code], open = x.open === st.code, b = d.bands[st.band];
+  var pill = sv ? (sv.att === 'حاضر' ? '<span class="pill ok">✅ ' + (sv.total == null ? '' : '<bdi>' + sv.total + '%</bdi>') + '</span>' : '<span class="pill wait">' + esc(sv.att) + '</span>') : '<span class="pill">لسه</span>';
+  var h = '<div class="st' + (sv ? ' done' : '') + '" data-st="' + esc(st.code) + '">' + stHead(st, open, pill);
+  if (!open) return h + '</div>';
+  if (sv && !d.canEdit) return h + examSavedHTML(sv, b) + '</div>';
+  var r = x.rows[st.code];
+  h += '<div class="chips">' + d.att.map(function (a) { return '<button type="button" class="chip' + (r.att === a ? ' on' + (a !== 'حاضر' ? ' absent' : '') : '') + '" data-x="att" data-s="' + esc(st.code) + '" data-v="' + a + '">' + a + '</button>'; }).join('') + '</div>';
+  if (r.att === 'حاضر') {
+    h += '<div class="grp">💡 أسئلة المحتوى</div>';
+    for (var i = 0; i < d.tpl.questions; i++) h += (d.tpl.texts[i] ? '<div class="desc" style="margin-top:6px">' + esc(d.tpl.texts[i]) + '</div>' : '') + lvRow('سؤال ' + (i + 1), st.code, String(i), r.q[i], null, 'eq');
+    h += '<div class="grp">📖 القرآن</div>';
+    quranCrit(b).forEach(function (c) { h += lvRow(c.name, st.code, c.key, r[c.key], c.levels, 'eqr'); });
+    h += '<div class="grp">🌱 مجالات النمو</div>';
+    b.domains.forEach(function (g) { h += lvRow(g.name, st.code, g.key, r.g[g.key], g.levels, 'eg'); });
+    h += '<div class="row" style="margin-top:8px"><div class="f" style="margin:0"><label class="lb">مقيّم المحتوى:</label><select data-in="contentEval" data-s="' + esc(st.code) + '">' + opts(d.evaluators, r.contentEval) + '</select></div>' +
+      '<div class="f" style="margin:0"><label class="lb">مقيّم القرآن:</label><select data-in="quranEval" data-s="' + esc(st.code) + '">' + opts(d.evaluators, r.quranEval) + '</select></div></div>';
+  }
+  h += '<div class="f" style="margin:6px 0 0"><textarea data-in="notes" data-s="' + esc(st.code) + '" placeholder="ملاحظات (اختياري)">' + esc(r.notes) + '</textarea></div>' +
+    '<button class="btn" type="button" data-x="save" data-s="' + esc(st.code) + '" style="margin-top:8px">' + (sv ? 'حفظ التعديل ✏️' : 'حفظ اختبار ' + esc(st.name) + ' ✅') + '</button>';
+  return h + '</div>';
+}
+function examSavedHTML(sv, b) {
+  if (sv.att !== 'حاضر') return '<div class="sub" style="margin:8px 0 0">' + esc(sv.att) + ' — سجّله ' + esc(sv.by) + '</div>';
+  var h = '<div class="line"><span class="k">الأسئلة</span>' + sv.q.filter(function (v) { return v !== '' && v != null; }).map(sc).join(' ') + '</div>' +
+    '<div class="line"><span class="k">القرآن</span>' + quranCrit(b).map(function (c) { return '<span class="pill">' + esc(c.name) + ' ' + sc(sv[c.key]) + '</span>'; }).join('') + '</div>' +
+    '<div class="line"><span class="k">المجالات</span>' + b.domains.map(function (g) { return '<span class="pill">' + esc(g.name) + ' ' + sc(sv.g[g.key]) + '</span>'; }).join('') + '</div>';
+  return h + '<div class="sub" style="margin:6px 0 0">مقيّم المحتوى: ' + esc(sv.contentEval) + ' • مقيّم القرآن: ' + esc(sv.quranEval) + ' • سجّله ' + esc(sv.by) + '</div>' +
+    (sv.notes ? '<div class="note">' + esc(sv.notes) + '</div>' : '') + '<div class="sub" style="margin:6px 0 0">الاختبار اتسجل — لو في غلط اطلب من المنسق يعدّله.</div>';
+}
+function fillExam(r, sv) {
+  r.att = sv.att || 'حاضر'; r.q = (sv.q || []).map(function (v) { return Number(v) || undefined; });
+  ['hifz', 'tajweed', 'maani'].forEach(function (k) { if (Number(sv[k])) r[k] = Number(sv[k]); });
+  r.g = Object.assign({}, sv.g || {}); r.contentEval = sv.contentEval || r.contentEval; r.quranEval = sv.quranEval || r.quranEval; r.notes = sv.notes || ''; r._loaded = true;
+}
+function updateExamStudent(code) {
+  var el = document.querySelector('.st[data-st="' + CSS.escape(code) + '"]'); if (!el) return;
+  var st = ST.ex.d.students.filter(function (s) { return s.code === code; })[0];
+  var t = document.createElement('div'); t.innerHTML = examStudentHTML(st); el.replaceWith(t.firstChild);
+}
+function bindExam() {
+  var m = $('main'), x = ST.ex;
+  m.onclick = function (e) {
+    var b = e.target.closest('[data-x]'); if (!b) return;
+    var a = b.dataset.x, code = b.dataset.s, r = code ? x.rows[code] : null;
+    if (a === 'back') { ST.exBack(); return; }
+    if (a === 'open') { x.open = x.open === code ? null : code; if (x.open && x.d.saved[code] && x.d.canEdit && !r._loaded) fillExam(r, x.d.saved[code]);
+      Sound.play('tap'); keepScroll(renderExam); if (x.open) scrollToSt(code); return; }
+    if (a === 'save') { saveExamRow(code, b); return; }
+    if (a === 'att') r.att = b.dataset.v;
+    else if (a === 'eq') r.q[Number(b.dataset.k)] = Number(b.dataset.v);
+    else if (a === 'eqr') r[b.dataset.k] = Number(b.dataset.v);
+    else if (a === 'eg') r.g[b.dataset.k] = Number(b.dataset.v);
+    else return;
+    Sound.play(/^[1-5]$/.test(b.dataset.v) ? 'lv' + b.dataset.v : 'tap'); updateExamStudent(code);
+  };
+  m.oninput = function (e) { var el = e.target; if (el.dataset.in && el.dataset.s) x.rows[el.dataset.s][el.dataset.in] = el.value; };
+  m.onchange = function (e) { var el = e.target; if (el.id === 'exsel') openExam(x.d.cls, el.value); else if (el.dataset.in && el.dataset.s) x.rows[el.dataset.s][el.dataset.in] = el.value; };
+}
+function saveExamRow(code, btn) {
+  var x = ST.ex, d = x.d, r = x.rows[code], st = d.students.filter(function (s) { return s.code === code; })[0], b = d.bands[st.band];
+  if (r.att === 'حاضر') {
+    var miss = [];
+    for (var i = 0; i < d.tpl.questions; i++) if (!r.q[i]) miss.push('سؤال ' + (i + 1));
+    quranCrit(b).forEach(function (c) { if (!r[c.key]) miss.push(c.name); });
+    b.domains.forEach(function (g) { if (!r.g[g.key]) miss.push(g.name); });
+    if (miss.length) { Sound.play('err'); toast('ناقص: ' + miss.join('، ')); return; }
+  }
+  var data = { att: r.att, q: r.q.slice(0, d.tpl.questions), hifz: r.hifz, tajweed: r.tajweed, maani: r.maani, g: r.g, contentEval: r.contentEval, quranEval: r.quranEval, notes: r.notes };
+  busy(btn, 'جاري الحفظ… ⏳');
+  call('saveExam', [ME.code, d.cls, d.exam, code, data, ST.exSub], function (res) {
+    Sound.play('ok'); toast('اتحفظ ✅ ' + st.name + (res.total != null ? ' — ' + res.total + '٪' : ''));
+    d.saved[code] = true; openExam(d.cls, d.exam, null, null, nextOpen(d.students, d.saved, code));
+  }, function (e) { busy(btn); failed(e); });
+}
+
+// ---------- التقييم الذاتي ----------
+function openSelf(cls, when, back, sub, openCode) {
+  loading();
+  if (back) { ST.exBack = back; ST.exSub = !!sub; }
+  call('selfForm', [ME.code, cls, when || '', ST.exSub], function (d) {
+    ST.sf = { d: d, rows: {}, open: openCode === undefined ? null : openCode };
+    d.students.forEach(function (s) { var sv = d.saved[s.code]; ST.sf.rows[s.code] = { g: Object.assign({}, sv ? sv.g : {}), note: sv ? sv.note || '' : '' }; });
+    renderSelf(); if (ST.sf.open) scrollToSt(ST.sf.open);
+  }, function (e) { failed(e); ST.exBack(); });
+}
+function renderSelf() {
+  var d = ST.sf.d, done = Object.keys(d.saved).length;
+  var h = '<button class="back" type="button" data-x="back">→ رجوع</button><div class="panel"><div class="row"><div><h3 style="margin:0">🙋 التقييم الذاتي — ' + esc(d.cls) + '</h3>' +
+    '<div class="sub" style="margin:2px 0 0">' + esc(d.term) + '</div></div><select id="sfsel" style="width:auto;flex:0 0 auto">' + opts(d.whens, d.when) + '</select></div>' +
+    '<div class="line"><span class="pill ' + (done === d.students.length ? 'ok' : 'wait') + '">اتسجل ' + done + ' من ' + d.students.length + '</span></div>' +
+    '<div class="info" style="margin:8px 0 0">اقرا السؤال للطالب بصوت وسيبه هو اللي يختار — مفيش إجابة صح وغلط. الصغيرين بيختاروا من 3 وشوش.</div></div>';
+  main(h + d.students.map(selfStudentHTML).join('')); bindSelf();
+}
+function selfStudentHTML(st) {
+  var x = ST.sf, d = x.d, sv = d.saved[st.code], open = x.open === st.code, b = d.bands[st.band], r = x.rows[st.code];
+  var h = '<div class="st' + (sv ? ' done' : '') + '" data-st="' + esc(st.code) + '">' + stHead(st, open, sv ? '<span class="pill ok">✅</span>' : '<span class="pill">لسه</span>');
+  if (!open) return h + '</div>';
+  b.domains.forEach(function (g) {
+    h += '<div class="desc" style="margin-top:10px;font-weight:600;color:#333">' + esc(g.q) + '</div>';
+    if (b.faces) h += '<div class="lv" style="margin-top:4px">' + d.faces.map(function (f) { return '<button type="button" data-x="sg" data-s="' + esc(st.code) + '" data-k="' + esc(g.key) + '" data-v="' + f[0] + '" class="' + (r.g[g.key] === f[0] ? 'on' : '') + '" style="font-size:24px;padding:6px 0">' + f[1] + '<div style="font-size:11px;font-weight:normal">' + esc(f[2]) + '</div></button>'; }).join('') + '</div>';
+    else h += lvRow('', st.code, g.key, r.g[g.key], null, 'sg', d.scale).replace('<div class="crit-t"></div>', '');
+  });
+  h += '<div class="f" style="margin:8px 0 0"><textarea data-in="note" data-s="' + esc(st.code) + '" placeholder="كلمة الطالب عن نفسه (اختياري)">' + esc(r.note) + '</textarea></div>' +
+    '<button class="btn" type="button" data-x="save" data-s="' + esc(st.code) + '" style="margin-top:8px">' + (sv ? 'حفظ التعديل ✏️' : 'حفظ ✅') + '</button>';
+  return h + '</div>';
+}
+function bindSelf() {
+  var m = $('main'), x = ST.sf;
+  m.onclick = function (e) {
+    var b = e.target.closest('[data-x]'); if (!b) return;
+    var a = b.dataset.x, code = b.dataset.s, r = code ? x.rows[code] : null;
+    if (a === 'back') { ST.exBack(); return; }
+    if (a === 'open') { x.open = x.open === code ? null : code; Sound.play('tap'); keepScroll(renderSelf); if (x.open) scrollToSt(code); return; }
+    if (a === 'save') { saveSelfRow(code, b); return; }
+    if (a === 'sg') { r.g[b.dataset.k] = Number(b.dataset.v); Sound.play('lv' + b.dataset.v);
+      var el = document.querySelector('.st[data-st="' + CSS.escape(code) + '"]'), st = x.d.students.filter(function (s) { return s.code === code; })[0];
+      var t = document.createElement('div'); t.innerHTML = selfStudentHTML(st); el.replaceWith(t.firstChild); }
+  };
+  m.oninput = function (e) { var el = e.target; if (el.dataset.in && el.dataset.s) x.rows[el.dataset.s][el.dataset.in] = el.value; };
+  m.onchange = function (e) { if (e.target.id === 'sfsel') openSelf(x.d.cls, e.target.value); };
+}
+function saveSelfRow(code, btn) {
+  var x = ST.sf, d = x.d, r = x.rows[code], st = d.students.filter(function (s) { return s.code === code; })[0], b = d.bands[st.band];
+  var miss = b.domains.filter(function (g) { return !r.g[g.key]; });
+  if (miss.length) { Sound.play('err'); toast('ناقص ' + miss.length + ' سؤال'); return; }
+  busy(btn, 'جاري الحفظ… ⏳');
+  call('saveSelf', [ME.code, d.cls, d.when, code, { g: r.g, note: r.note }, ST.exSub], function () {
+    Sound.play('ok'); toast('اتحفظ ✅ ' + st.name); d.saved[code] = true; openSelf(d.cls, d.when, null, null, nextOpen(d.students, d.saved, code));
+  }, function (e) { busy(btn); failed(e); });
+}
+
+// ---------- في التقرير ----------
+function examReportHTML(x) {
+  if (!x || (!x.exams.length && !x.selfCount)) return '';
+  var h = '';
+  if (x.exams.length) h += '<h3 style="margin-top:14px">📝 الاختبارات</h3><div class="line">' + x.exams.map(function (e) {
+    return '<span class="pill ' + (e.att === 'حاضر' ? 'c' : 'wait') + '">' + esc(e.exam) + ': ' + (e.att === 'حاضر' ? (e.total == null ? '—' : '<bdi>' + e.total + '%</bdi>') : esc(e.att)) + '</span>'; }).join('') + '</div>';
+  if (x.profile.some(function (p) { return p.coach != null || p.self != null; })) {
+    h += '<h3 style="margin-top:14px">🌱 النمو: المربي مقابل الطالب</h3>' + x.profile.map(function (p) {
+      var bar = function (v, c) { return '<div class="tr" style="height:7px;margin:2px 0"><div class="fl" style="width:' + (v ? v / 5 * 100 : 0) + '%;background:' + c + '"></div></div>'; };
+      var gs = p.self != null && p.selfStart != null && x.selfCount > 1 ? p.self - p.selfStart : null;
+      return '<div class="bar"><span class="nm">' + esc(p.name) + '</span><div style="flex:1">' + bar(p.coach, 'var(--c)') + bar(p.self, 'var(--l3)') + '</div><span class="vl">' +
+        (p.coach == null ? '—' : p.coach) + ' / ' + (p.self == null ? '—' : p.self) + (gs ? ' <small style="color:' + (gs > 0 ? 'var(--l5)' : 'var(--l1)') + '">' + (gs > 0 ? '▲' : '▼') + Math.abs(gs) + '</small>' : '') + '</span></div>'; }).join('') +
+      '<div class="sub">الأزرق = المربي (' + esc(x.profileFrom || 'لسه') + ')، الأصفر = الطالب في آخر تقييم ذاتي (▲▼ = تغيّره عن أول مرة). لو الفرق بينهم كبير، يستاهل كلام مع الطالب.</div>';
+  }
+  return h;
 }
 
 // ======================================================================
