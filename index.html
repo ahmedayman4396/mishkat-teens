@@ -29,8 +29,8 @@ textarea{min-height:60px;resize:vertical}input:focus,select:focus,textarea:focus
 .top{color:#fff;margin:-30px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .top h2{color:#fff;font-size:18px;margin:0}.top .s{font-size:12.5px;opacity:.9}
 .top button{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-family:inherit;cursor:pointer}
-.tabs{display:flex;gap:6px;background:#fff;padding:6px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.06);margin-bottom:12px}
-.tabs button{flex:1;border:none;background:transparent;padding:10px 4px;border-radius:10px;font-family:inherit;font-size:14px;color:#555;cursor:pointer}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;background:#fff;padding:6px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.06);margin-bottom:12px}
+.tabs button{flex:1 0 auto;white-space:nowrap;padding-left:10px!important;padding-right:10px!important;border:none;background:transparent;padding:10px 4px;border-radius:10px;font-family:inherit;font-size:14px;color:#555;cursor:pointer}
 .tabs button.on{background:var(--c);color:#fff;font-weight:bold}
 .panel{background:#fff;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.06);margin-bottom:12px;text-align:right}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1;min-width:0}
@@ -80,6 +80,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 4px
 .chk{display:flex;flex-wrap:wrap;gap:6px}.chk label{border:2px solid var(--ln);border-radius:20px;padding:5px 10px;font-size:13px;cursor:pointer}.chk input{display:none}
 .chk label.on{background:var(--c);color:#fff;border-color:var(--c)}
 .ur{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--ln);font-size:14px}.ur.off{opacity:.5}
+@media print{.top,.tabs,.back,button,input[type=month]{display:none!important}body{background:#fff}.panel{box-shadow:none;border:1px solid #ddd}}
 </style>
 </head>
 <body>
@@ -105,7 +106,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 4px
 var API_URL = 'https://script.google.com/macros/s/AKfycbxMaU2MpXEFYy2rHQOLLWH_9wAHpfthVP5zTXWCN6QgVHxBD-50BVQ3KeydDspvrzGorw/exec';
 var LOGOS = { teens: 'logo-teens.svg', dar: 'logo-dar.svg' };
 var ME = null, VIEW = '', ST = {};
-var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', admin: '⚙️ الأدمن' };
+var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', quran: '📖 القرآن', acad: '🎓 الأكاديمي', quality: '✅ الجودة', board: '🏆 الأثر', admin: '⚙️ الأدمن' };
 
 // ---------- أصوات ----------
 var Sound = { ctx: null, on: true,
@@ -175,6 +176,7 @@ function go(v) {
   VIEW = v;
   [].forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.v === v); });
   if (v === 'coach') coachHome(); else if (v === 'follow') followHome(0); else if (v === 'admin') adminHome();
+  else if (v === 'quran') quranHome(); else if (v === 'acad') { ST.caseBack = acadHome; acadHome(); } else if (v === 'quality') qualityHome(); else if (v === 'board') boardHome();
 }
 
 // ======================================================================
@@ -186,7 +188,8 @@ function coachHome() {
       return '<div class="cls ok" data-cls="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
         (c.hasTerm ? ' • ' + esc(c.term) : ' • <span class="pill wait">مفيش ترم حالي</span>') + '</div></div>';
     }).join('') : '<div class="empty">مفيش مجموعات مسجلة باسمك.</div>') +
-    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button></div><div id="sub-list"></div>');
+    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button></div><div id="sub-list"></div><div id="todo"></div>');
+  loadTodo();
   $('main').onclick = function (e) {
     var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, null, c.dataset.sub === '1'); return; }
     if (e.target.id === 'sub-btn') {
@@ -204,12 +207,12 @@ function openSession(cls, n, sub) {
   loading();
   call('getSession', [ME.code, cls, n, !!sub], function (r) { ST = { s: r, sub: !!sub, rows: {}, guests: [], tasks: {}, date: r.today }; brand(r.section);
     if (!r.readonly) r.students.forEach(function (s) { var p = (r.projectStatus || {})[s.code] || {};
-      ST.rows[s.code] = { code: s.code, att: 'حاضر', scores: {}, follow: {}, notes: '', behavior: '', project: { status: p.status || '', scores: Object.assign({}, p.scores || {}) } }; });
+      ST.rows[s.code] = { code: s.code, att: 'حاضر', scores: {}, follow: {}, notes: '', behavior: '', support: '', project: { status: p.status || '', scores: Object.assign({}, p.scores || {}), evidence: p.evidence || '' } }; });
     renderSession(); }, function (e) { failed(e); coachHome(); });
 }
 
 function sessionLabel(s) {
-  var st = { done: '✅', cancelled: '🚫', open: '', future: '⏳' }[s.status];
+  var st = { done: '✅', cancelled: '🚫', open: '', future: '⏳', before: '⏸ قبل السيستم' }[s.status];
   return 'حلقة ' + s.n + ' — أسبوع ' + s.week + (s.mid ? ' • ميد' : '') + (s.final ? ' • فاينال' : '') + ' ' + st;
 }
 
@@ -220,7 +223,7 @@ function renderSession() {
     '<div class="sub" style="margin:2px 0 0">' + esc(r.program) + ' • ' + esc(r.level || '') + ' • ' + esc(r.term.name) + '</div></div>' +
     '<button class="btn sm sec" type="button" data-act="history" style="flex:0 0 auto">🗂️ تقييماتي السابقة</button></div>' +
     '<div class="row" style="margin-top:8px"><button class="btn sm' + (s.mid || s.final ? '' : ' sec') + '" type="button" data-act="exam">📝 الميد / الفاينال</button><button class="btn sm sec" type="button" data-act="self">🙋 التقييم الذاتي</button></div>' +
-    '<div class="f" style="margin:10px 0 0"><select id="sess">' + r.sessions.map(function (x) { return '<option value="' + x.n + '"' + (x.n === s.n ? ' selected' : '') + (x.status === 'cancelled' ? ' disabled' : '') + '>' + sessionLabel(x) + '</option>'; }).join('') + '</select></div></div>';
+    '<div class="f" style="margin:10px 0 0"><select id="sess">' + r.sessions.map(function (x) { return '<option value="' + x.n + '"' + (x.n === s.n ? ' selected' : '') + (x.status === 'cancelled' || x.status === 'before' ? ' disabled' : '') + '>' + sessionLabel(x) + '</option>'; }).join('') + '</select></div></div>';
   var info = '';
   if (s.family) info += '<div class="info">🏠 الأسبوع ده فيه نشاط أسرة — علّم لكل طالب عمله ولا لأ.</div>';
   if (s.mid || s.final) info += '<div class="info">📝 الأسبوع ده أسبوع ' + (s.mid ? 'الميد ترم' : 'الفاينال') + '.</div>';
@@ -269,6 +272,12 @@ function studentHTML(st, guest) {
     if (row.behavior !== '' || row._showBeh) h += '<div class="f" style="margin-top:6px"><input type="text" data-in="behavior" data-s="' + esc(st.code) + '" value="' + esc(row.behavior) + '" placeholder="الموقف باختصار (بيوصل لأخصائي السلوك لو اتكرر)"></div>';
     h += '<div class="f" style="margin:6px 0 0"><textarea data-in="notes" data-s="' + esc(st.code) + '" placeholder="ملاحظات (اختياري)">' + esc(row.notes) + '</textarea></div>';
   }
+  if (!guest && r.session.support) {
+    var si = (r.supportInfo || {})[st.code] || {};
+    h += '<div class="grp">📖 يحتاج دعم في الحفظ؟</div><div class="chips">' + ['نعم', 'لأ'].map(function (v) { return '<button type="button" class="chip' + (row.support === v ? ' on' + (v === 'نعم' ? ' absent' : '') : '') + '" data-act="sup" data-s="' + esc(st.code) + '" data-v="' + v + '">' + v + '</button>'; }).join('') + '</div>' +
+      '<div class="desc" style="margin-right:0">متوسط الحفظ (آخر 3): ' + (si.avgHifz == null ? 'لسه' : si.avgHifz) + (si.lastExam && si.lastExam.quran != null ? ' • قرآن ' + esc(si.lastExam.exam) + ': ' + si.lastExam.quran : '') +
+      (si.suggest ? ' • 💡 السيستم بيقترح «نعم»' : '') + (si.last ? ' • آخر قرار: ' + esc(si.last) : '') + '</div>';
+  }
   if (!guest && r.project) h += projectHTML(st.code, row);
   return h + '</div>';
 }
@@ -280,7 +289,8 @@ function projectHTML(code, row) {
   if (p.status === 'سلّم') h += ME.projectDims.map(function (d) {
     var lvs = scaleOf(d[0]), cur = p.scores[d[0]];
     return '<div class="crit"><div class="crit-r"><div class="crit-t">' + d[1] + '</div><div class="lv">' + [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" data-act="psc" data-s="' + esc(code) + '" data-c="' + d[0] + '" data-v="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + v + '</button>'; }).join('') + '</div></div>' +
-      (lvs && cur ? '<div class="desc">' + esc(lvs[cur - 1]) + '</div>' : '') + allLv(lvs) + '</div>'; }).join('');
+      (lvs && cur ? '<div class="desc">' + esc(lvs[cur - 1]) + '</div>' : '') + allLv(lvs) + '</div>'; }).join('') +
+    '<div class="f" style="margin-top:6px"><input type="text" data-in="pev" data-s="' + esc(code) + '" value="' + esc(p.evidence || '') + '" placeholder="الدليل: موقف شفته أو كلام من ولي الأمر (اختياري)"></div>';
   return h;
 }
 
@@ -293,6 +303,7 @@ function tasksHTML() {
 
 function isComplete(row) {
   if (!row.att) return false;
+  if (ST.s.session.support && !row._guest && !row.support) return false;
   if (ME.rated.indexOf(row.att) === -1) return projDone(row);
   return ST.s.criteria.every(function (c) { return row.scores[c.key] !== undefined && row.scores[c.key] !== ''; }) && projDone(row);
 }
@@ -316,6 +327,7 @@ function bindSession() {
     else if (a === 'fu') { var cur = row.follow[b.dataset.f]; row.follow[b.dataset.f] = cur === 'تم' ? 'لم يتم' : cur === 'لم يتم' ? '' : 'تم'; }
     else if (a === 'beh') { row._showBeh = !row._showBeh || !!row.behavior; }
     else if (a === 'pst') { row.project.status = b.dataset.v; }
+    else if (a === 'sup') { row.support = b.dataset.v; }
     else if (a === 'psc') { row.project.scores[b.dataset.c] = Number(b.dataset.v); }
     else if (a === 'task') { ST.tasks[b.dataset.t] = b.dataset.v; Sound.play('tap'); keepScroll(renderSession); return; }
     else if (a === 'guest') { guestBox(); return; }
@@ -327,7 +339,7 @@ function bindSession() {
     else return;
     Sound.play('tap'); updateStudent(b.dataset.s);
   };
-  m.oninput = function (e) { var el = e.target; if (el.dataset.in) { rowOf(el.dataset.s)[el.dataset.in] = el.value; }
+  m.oninput = function (e) { var el = e.target; if (el.dataset.in === 'pev') { rowOf(el.dataset.s).project.evidence = el.value; } else if (el.dataset.in) { rowOf(el.dataset.s)[el.dataset.in] = el.value; }
     if (el.id === 'sdate') ST.date = el.value; };
   m.onchange = function (e) { if (e.target.id === 'sess') { var r = ST.s; openSession(r.cls, Number(e.target.value), ST.sub); }
     if (e.target.id === 'gq') findGuest(e.target.value); };
@@ -368,7 +380,7 @@ function save() {
   if (t) { Sound.play('err'); toast('أكّد مهمة «' + t[1] + '»'); return; }
   var payload = { date: ST.date, tasks: ST.tasks,
     students: r.students.map(function (s) { var x = ST.rows[s.code]; return { code: x.code, att: x.att, scores: x.scores, follow: x.follow, notes: x.notes, behavior: x.behavior,
-      project: r.project ? { status: x.project.status, scores: x.project.status === 'سلّم' ? x.project.scores : {} } : null }; }),
+      support: x.support, project: r.project ? { status: x.project.status, scores: x.project.status === 'سلّم' ? x.project.scores : {}, evidence: x.project.evidence } : null }; }),
     guests: ST.guests.map(function (g) { return { code: g.code, scores: g.scores, follow: g.follow, notes: g.notes, behavior: g.behavior }; }) };
   var b = $('save-btn'); busy(b, 'جاري الحفظ… ⏳');
   call('saveSession', [ME.code, r.cls, r.session.n, payload, ST.sub], function (res) {
@@ -415,7 +427,7 @@ function followHome(off) {
   FW = off; loading();
   call('followDashboard', [ME.code, off], function (d) {
     var list = d.classes, sessions = [], late = 0, pend = 0, present = 0, total = 0;
-    list.forEach(function (c) { (c.sessions || []).forEach(function (s) { if (s.status !== 'cancelled' && s.status !== 'future') sessions.push(s); if (s.log) { present += s.log.present; total += s.log.present + s.log.absent; if (s.log.timing !== 'في ميعاده') late++; } else if (s.status === 'open') pend++; }); });
+    list.forEach(function (c) { (c.sessions || []).forEach(function (s) { if (s.status !== 'cancelled' && s.status !== 'future' && s.status !== 'before') sessions.push(s); if (s.log) { present += s.log.present; total += s.log.present + s.log.absent; if (s.log.timing !== 'في ميعاده') late++; } else if (s.status === 'open') pend++; }); });
     var done = sessions.filter(function (s) { return s.log; }).length;
     var h = '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-w="' + (off - 1) + '">→ الأسبوع اللي فات</button><div style="text-align:center;font-weight:bold;color:var(--c)">' +
       (off === 0 ? 'الأسبوع الحالي' : off < 0 ? 'قبل ' + (-off) + ' أسبوع' : 'بعد ' + off + ' أسبوع') + '</div><button class="btn sm sec" type="button" data-w="' + (off + 1) + '"' + (off >= 0 ? ' disabled' : '') + '>الأسبوع الجاي ←</button></div></div>' +
@@ -427,6 +439,7 @@ function followHome(off) {
 }
 function classCardHTML(c) {
   if (c.noTerm) return '<div class="cls" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • <span class="pill wait">مفيش ترم حالي</span></div></div>';
+  c.sessions = (c.sessions || []).filter(function (s) { return s.status !== 'before'; });
   var ss = c.sessions.filter(function (s) { return s.status !== 'future'; });
   var missing = ss.some(function (s) { return s.status === 'open' && !s.log; });
   var tasksPend = ss.some(function (s) { return s.log && ME.tasks.some(function (t) { return s.log.tasks[t[0]] === 'لم يتم'; }); }) || c.oldPendingTasks > 0;
@@ -728,6 +741,323 @@ function examReportHTML(x) {
 }
 
 // ======================================================================
+//              الخطط والحالات (القسم الأكاديمي + خطط القرآن)
+// ======================================================================
+function pillStatus(c) {
+  var cls = c.status === 'مفتوحة' ? (c.overdue ? 'no' : 'wait') : (c.status === 'مرفوعة للإدارة' ? 'no' : 'ok');
+  return '<span class="pill ' + cls + '">' + esc(c.status) + (c.overdue ? ' • متأخرة' : '') + '</span>';
+}
+function caseRow(c) {
+  return '<div class="cls ' + (c.overdue ? 'late' : c.status === 'مفتوحة' ? 'warn' : 'ok') + '" data-case="' + esc(c.kind) + '|' + esc(c.id) + '"><h4>' + esc(c.id) +
+    (c.subjectName ? ' — ' + esc(c.subjectName) : (c.f && c.f.topic ? ' — ' + esc(c.f.topic) : '')) + (c.cycle ? ' <small>(دورة ' + c.cycle + ')</small>' : '') + '</h4>' +
+    '<div class="m">' + (c.cls ? esc(c.cls) + ' • ' : '') + 'فتحها ' + esc(c.byName) + ' • ' + esc(c.time) + '</div>' +
+    '<div class="line">' + pillStatus(c) + (c.status === 'مفتوحة' && c.due ? '<span class="pill">المتابعة: ' + esc(c.due) + '</span>' : '') + (c.result ? '<span class="pill c">' + esc(c.result) + '</span>' : '') + '</div></div>';
+}
+function acadHome() {
+  loading();
+  call('casesHome', [ME.code], function (d) {
+    var h = '<div class="panel"><h3>🎓 الخطط والحالات</h3>' + d.kinds.map(function (k) {
+      return '<div class="cls ' + (k.overdue || k.escalated ? 'late' : k.open ? 'warn' : 'ok') + '" data-kind="' + k.kind + '"><h4>' + k.icon + ' ' + esc(k.title) + '</h4><div class="line">' +
+        '<span class="pill">مفتوحة ' + k.open + '</span>' + (k.overdue ? '<span class="pill no">متابعة متأخرة ' + k.overdue + '</span>' : '') +
+        (k.escalated ? '<span class="pill no">مستنية رد الإدارة ' + k.escalated + '</span>' : '') + (k.canEdit ? '' : '<span class="pill">قراءة</span>') + '</div></div>'; }).join('') + '</div>';
+    if (d.canReport) h += '<div class="panel"><button class="btn sec" type="button" data-rep="1">📊 التقرير الشهري</button></div>';
+    main(h);
+    $('main').onclick = function (e) { var k = e.target.closest('[data-kind]'); if (k) { Sound.play('tap'); caseListView(k.dataset.kind, 'open'); return; }
+      if (e.target.closest('[data-rep]')) monthlyView(''); };
+  });
+}
+function caseListView(kind, filter, back) {
+  loading();
+  ST.caseBack = back || ST.caseBack || acadHome;
+  call('caseMeta', [ME.code, kind], function (meta) {
+    ST.meta = ST.meta || {}; ST.meta[kind] = meta;
+    call('caseList', [ME.code, kind, filter], function (d) {
+      var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><div class="row"><h3 style="margin:0">' + meta.icon + ' ' + esc(meta.title) + '</h3>' +
+        (meta.canEdit ? '<button class="btn sm" type="button" data-new="1" style="flex:0 0 auto">➕ جديدة</button>' : '') + '</div>' +
+        '<div class="chips"><button type="button" class="chip' + (filter === 'open' ? ' on' : '') + '" data-f="open">المفتوحة</button><button type="button" class="chip' + (filter !== 'open' ? ' on' : '') + '" data-f="all">الكل</button></div></div>' +
+        (d.items.length ? d.items.map(caseRow).join('') : '<div class="panel empty">مفيش حاجة هنا.</div>') + '<div id="cbox"></div>';
+      main(h);
+      $('main').onclick = function (e) {
+        if (e.target.closest('[data-b]')) { ST.caseBack(); return; }
+        var f = e.target.closest('[data-f]'); if (f) { caseListView(kind, f.dataset.f); return; }
+        if (e.target.closest('[data-new]')) { caseForm(kind, null, {}); return; }
+        var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], function () { caseListView(kind, filter); }); }
+      };
+    });
+  });
+}
+function fieldInput(f, val, meta) {
+  var key = f[0], type = f[2] || 'text', v = val == null ? '' : val;
+  var lab = '<label class="lb">' + esc(f[1]) + ':</label>';
+  if (type.indexOf('select:') === 0) return '<div class="f">' + lab + '<select data-fd="' + key + '">' + opts((meta.options[type.slice(7)] || []), v, '— اختار —') + '</select></div>';
+  if (type === 'user') return '<div class="f">' + lab + '<select data-fd="' + key + '">' + opts(meta.owners || [], v, '— اختار —') + '</select></div>';
+  if (type === 'number') return '<div class="f">' + lab + '<input type="number" min="1" data-fd="' + key + '" value="' + esc(v) + '"></div>';
+  if (type === 'date') return '<div class="f">' + lab + '<input type="date" data-fd="' + key + '" value="' + esc(v) + '"></div>';
+  if (type === 'month') return '<div class="f">' + lab + '<input type="month" data-fd="' + key + '" value="' + esc(v) + '"></div>';
+  return '<div class="f">' + lab + '<textarea data-fd="' + key + '">' + esc(v) + '</textarea></div>';
+}
+function caseForm(kind, rec, pre) {
+  var meta = ST.meta[kind], box = $('cbox') || $('main');
+  pre = pre || {};
+  var subj = '';
+  if (!rec && meta.subject !== 'none') {
+    subj = '<div class="f"><label class="lb">' + (meta.subject === 'coach' ? 'المربي' : 'الطالب') + ':</label><input type="text" id="c-subj" list="c-subj-l" placeholder="اكتب الاسم واختار" value="' +
+      esc(pre.subjectLabel || '') + '"><datalist id="c-subj-l">' + meta.subjects.map(function (s) { return '<option value="' + esc(s.name + (s.cls ? ' — ' + s.cls : '')) + '">'; }).join('') + '</datalist></div>';
+  }
+  var cyc = !rec && meta.cycles ? '<div class="sub" style="margin:0 0 8px">الدورة: ' + (pre.cycle || 1) + ' من ' + meta.cycles + '</div>' : '';
+  box.innerHTML = '<div class="panel" id="cform"><h3>' + (rec ? 'تعديل ' + esc(rec.id) : meta.icon + ' ' + esc(meta.title) + ' جديدة') + '</h3>' + subj + cyc +
+    meta.fields.map(function (f) { return fieldInput(f, rec ? rec.f[f[0]] : (pre.f || {})[f[0]], meta); }).join('') +
+    '<div class="row"><button class="btn" type="button" id="c-save">حفظ ✅</button><button class="btn sec" type="button" id="c-cancel">إلغاء</button></div></div>';
+  $('cform').scrollIntoView({ behavior: 'smooth' });
+  $('c-cancel').onclick = function () { $('cform').remove(); };
+  $('c-save').onclick = function () {
+    var data = { f: {}, cycle: pre.cycle };
+    [].forEach.call(document.querySelectorAll('#cform [data-fd]'), function (el) { data.f[el.dataset.fd] = el.value; });
+    if (rec) data.id = rec.id;
+    else if (meta.subject !== 'none') {
+      var lbl = $('c-subj').value.trim(), s = meta.subjects.filter(function (x) { return x.name + (x.cls ? ' — ' + x.cls : '') === lbl || x.name === lbl; })[0];
+      if (!s) { Sound.play('err'); toast('اختار ' + (meta.subject === 'coach' ? 'المربي' : 'الطالب') + ' من القايمة'); return; }
+      data.subject = s.code;
+    }
+    var b = this; busy(b, 'جاري الحفظ… ⏳');
+    call('caseSave', [ME.code, kind, data], function (r) { Sound.play('ok'); toast('اتحفظت ✅ ' + r.id); caseView(kind, r.id); }, function (e) { busy(b); failed(e); });
+  };
+}
+function caseView(kind, id, back) {
+  if (back) ST.caseViewBack = back;
+  loading();
+  call('caseGet', [ME.code, kind, id], function (c) {
+    var meta = c.meta, open = c.status === 'مفتوحة';
+    ST.meta = ST.meta || {}; if (!ST.meta[kind] && c.canEdit) ST.meta[kind] = null;
+    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>' + meta.icon + ' ' + esc(meta.title) + ' ' + esc(c.id) + (c.cycle ? ' <small>(دورة ' + c.cycle + ' من ' + meta.cycles + ')</small>' : '') + '</h3>' +
+      '<div class="sub">' + (c.subjectName ? esc(c.subjectName) + (c.cls ? ' — ' + esc(c.cls) : '') + ' • ' : '') + 'فتحها ' + esc(c.byName) + ' • ' + esc(c.time) + '</div>' +
+      '<div class="line">' + pillStatus(c) + (open && c.due ? '<span class="pill">المتابعة الجاية: ' + esc(c.due) + '</span>' : '') + (c.result ? '<span class="pill c">النتيجة: ' + esc(c.result) + '</span>' : '') + '</div>' +
+      meta.fields.map(function (f) { var v = c.f[f[0]]; return v ? '<div class="note"><b>' + esc(f[1]) + ':</b> ' + esc(v) + '</div>' : ''; }).join('') +
+      (c.mgmt ? '<div class="note"><b>رد الإدارة:</b> ' + esc(c.mgmt) + '</div>' : '') +
+      (c.level === 'read' ? '<div class="sub" style="margin-top:8px">للقراءة — نفّذ المطلوب منك وسجّله في «متابعة».</div>' : '') +
+      '<div class="row" style="margin-top:8px">' + (c.canEdit && open ? '<button class="btn sm sec" type="button" data-x="edit">✏️ تعديل</button>' : '') +
+      (c.canEdit && open ? '<button class="btn sm sec" type="button" data-x="close">🏁 قفل</button>' : '') + '</div></div>';
+    h += '<div class="panel"><h3>🗓️ المتابعات (' + c.followups.length + ')</h3>' + (c.followups.length ? c.followups.map(function (f) {
+      return '<div class="note"><b>' + esc(f.time) + ' — ' + esc(f.byName) + ':</b> ' + (f.action ? '<span class="pill">' + esc(f.action) + '</span> ' : '') + esc(f.note) +
+        (f.result ? ' <span class="pill c">' + esc(f.result) + '</span>' : '') + (f.next ? ' <span class="pill">' + esc(f.next) + '</span>' : '') + (f.nextDue ? ' <small>المتابعة الجاية ' + esc(f.nextDue) + '</small>' : '') + '</div>'; }).join('')
+      : '<div class="empty">لسه مفيش متابعات.</div>');
+    if (c.canFollow && open) h += '<div style="margin-top:10px"><div class="row">' + (meta.actions.length ? '<div class="f" style="margin:0"><label class="lb">الإجراء:</label><select id="fu-a">' + opts(meta.actions, '', '— اختار —') + '</select></div>' : '') +
+      '<div class="f" style="margin:0"><label class="lb">النتيجة:</label><select id="fu-r">' + opts(meta.fuResults, '', '—') + '</select></div></div>' +
+      (meta.fuNext.length ? '<div class="f"><label class="lb">الخطوة الجاية:</label><select id="fu-n">' + opts(meta.fuNext, '', '—') + '</select></div>' : '') +
+      '<div class="f"><textarea id="fu-note" placeholder="اللي اتعمل باختصار"></textarea></div><div class="row"><div class="f" style="margin:0"><label class="lb">المتابعة الجاية:</label><input type="date" id="fu-d"></div>' +
+      '<button class="btn sm" type="button" data-x="fu" style="align-self:flex-end">➕ سجّل متابعة</button></div></div>';
+    h += '</div>';
+    if (c.canMgmt) h += '<div class="panel"><h3>🏛️ رد الإدارة</h3><div class="sub">الخطة دي اتكررت ' + meta.cycles + ' دورات من غير ما الهدف يتحقق.</div><div class="f"><textarea id="mg"></textarea></div><button class="btn" type="button" data-x="mg">حفظ الرد</button></div>';
+    if (c.history.length) h += '<div class="panel"><h3>📂 خطط سابقة لنفس الشخص</h3>' + c.history.map(function (x) { return '<span class="pill">' + esc(x.id) + (x.cycle ? ' د' + x.cycle : '') + ': ' + esc(x.result || x.status) + '</span> '; }).join('') + '</div>';
+    h += '<div id="cbox"></div>';
+    main(h);
+    $('main').onclick = function (e) {
+      if (e.target.closest('[data-b]')) { (ST.caseViewBack || acadHome)(); return; }
+      var b = e.target.closest('[data-x]'); if (!b) return; var a = b.dataset.x;
+      if (a === 'edit') { ensureMeta(kind, function () { caseForm(kind, c); }); }
+      else if (a === 'fu') { var note = $('fu-note').value.trim(), act = $('fu-a') ? $('fu-a').value : '';
+        if (!note && !act) { Sound.play('err'); toast('اكتب اللي اتعمل'); return; }
+        busy(b, '⏳'); call('caseFollow', [ME.code, kind, c.id, { action: act, note: note, result: $('fu-r').value, next: $('fu-n') ? $('fu-n').value : '', nextDue: $('fu-d').value }],
+          function (r) { Sound.play('ok'); toast(r.closed ? 'اتسجلت واتقفلت ✅' : 'اتسجلت ✅'); caseView(kind, c.id); }, function (er) { busy(b); failed(er); }); }
+      else if (a === 'close') closeBox(kind, c);
+      else if (a === 'mg') { var t = $('mg').value.trim(); if (!t) return; call('caseMgmt', [ME.code, kind, c.id, t], function () { toast('اتحفظ ✅'); caseView(kind, c.id); }); }
+    };
+  }, function (e) { failed(e); (ST.caseViewBack || acadHome)(); });
+}
+function ensureMeta(kind, fn) { if (ST.meta && ST.meta[kind]) return fn(); call('caseMeta', [ME.code, kind], function (m) { ST.meta = ST.meta || {}; ST.meta[kind] = m; fn(); }); }
+function closeBox(kind, c) {
+  var meta = c.meta;
+  $('cbox').innerHTML = '<div class="panel" id="clb"><h3>🏁 قفل ' + esc(c.id) + '</h3>' + (meta.plan ? '<div class="chips">' + meta.planResults.map(function (r) { return '<button type="button" class="chip" data-r="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>'
+    : '<div class="f"><label class="lb">النتيجة:</label><input type="text" id="cl-r" placeholder="زي: اتحلت / اتقفلت بعد تحسن"></div>') +
+    '<div class="f"><textarea id="cl-n" placeholder="ملاحظة (اختياري)"></textarea></div>' + (meta.cycles ? '<div class="sub">لو الهدف ما اتحققش، هتبدأ دورة جديدة بخطة معدّلة. بعد الدورة ' + meta.cycles + ' بتترفع للإدارة.</div>' : '') +
+    '<button class="btn" type="button" id="cl-go">قفل</button></div>';
+  var pick = '';
+  $('clb').onclick = function (e) { var r = e.target.closest('[data-r]'); if (r) { pick = r.dataset.r; [].forEach.call(r.parentNode.children, function (x) { x.classList.toggle('on', x === r); }); } };
+  $('clb').scrollIntoView({ behavior: 'smooth' });
+  $('cl-go').onclick = function () {
+    var res = meta.plan ? pick : $('cl-r').value.trim();
+    if (!res) { Sound.play('err'); toast('اختار النتيجة'); return; }
+    call('caseClose', [ME.code, kind, c.id, res, $('cl-n').value], function (r) {
+      Sound.play('ok');
+      if (r.escalated) { toast('اتقفلت واترفعت للإدارة'); caseView(kind, c.id); return; }
+      if (r.nextCycle && confirm('الهدف ما اتحققش بالكامل. تفتح الدورة ' + r.nextCycle + ' بخطة معدّلة؟')) {
+        ensureMeta(kind, function () { caseListView(kind, 'open'); setTimeout(function () { caseForm(kind, null, { cycle: r.nextCycle, f: c.f, subjectLabel: c.subjectName }); }, 900); });
+        return; }
+      toast('اتقفلت ✅'); caseView(kind, c.id);
+    }, failed);
+  };
+}
+// المطلوب من المربي (على شاشة مجموعاتي)
+function loadTodo() {
+  var box = $('todo'); if (!box) return;
+  call('myTodo', [ME.code], function (list) {
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="panel"><h3>📌 المطلوب منك</h3><div class="sub">خطط مفتوحة على طلابك أو خطة تطويرك — افتحها ونفّذ المطلوب وسجّله.</div>' + list.map(caseRow).join('') + '</div>';
+    box.onclick = function (e) { var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], coachHome); } };
+  }, function () { box.innerHTML = ''; });
+}
+
+// ======================================================================
+//                               قسم القرآن
+// ======================================================================
+function quranHome() {
+  loading();
+  call('quranHome', [ME.code], function (d) {
+    var yes = d.list.filter(function (x) { return x.decision === 'نعم'; }), sug = d.list.filter(function (x) { return x.decision !== 'نعم'; });
+    var item = function (x) {
+      return '<div class="ur"><span><b>' + esc(x.name) + '</b> <small style="color:var(--m)">' + esc(x.cls) + (x.quran ? ' • ' + esc(x.quran) : '') + '</small><br><small>' +
+        'متوسط الحفظ (آخر 3): ' + (x.avgHifz == null ? '—' : x.avgHifz) + ' من ' + x.n + ' تقييم' + (x.lastExam ? ' • قرآن ' + esc(x.lastExam.exam) + ': ' + (x.lastExam.quran == null ? '—' : x.lastExam.quran) : '') +
+        (x.decision === 'نعم' ? ' • قرار ' + esc(x.decidedBy) + ' ' + esc(x.decidedAt) : '') + (x.waiting != null ? ' • <span style="color:var(--bad)">مستني خطة من ' + x.waiting + ' يوم</span>' : '') + '</small></span>' +
+        '<span>' + (x.plan ? '<button class="btn ghost" type="button" data-plan="' + esc(x.plan) + '">خطة ' + esc(x.plan) + '</button>' : (d.canPlan ? '<button class="btn sm" type="button" data-new="' + esc(x.code) + '" data-nm="' + esc(x.name + ' — ' + x.cls) + '">➕ خطة</button>' : '')) + '</span></div>'; };
+    var h = '<div class="panel"><h3>📖 يحتاج دعم في الحفظ (' + yes.length + ')</h3><div class="sub">المربي بيقرر في «أسابيع دعم الحفظ» من «الترمات».</div>' + (yes.length ? yes.map(item).join('') : '<div class="empty">مفيش حد لسه.</div>') + '</div>';
+    if (sug.length) h += '<div class="panel"><h3>💡 اقتراح السيستم (' + sug.length + ')</h3><div class="sub">متوسط الحفظ في آخر 3 تقييمات أقل من ' + d.threshold + ' — المربي لسه ما قررش «نعم».</div>' + sug.map(item).join('') + '</div>';
+    h += '<div class="panel"><h3>👥 المجموعات</h3>' + d.classes.map(function (c) { return '<div class="cls" data-qc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
+      ' • ' + c.students + ' طالب • دعم ' + c.support + (c.supportWeeks.length ? ' • أسابيع الدعم: ' + c.supportWeeks.join('، ') : ' • <span class="pill wait">مفيش أسابيع دعم محددة</span>') + '</div></div>'; }).join('') + '</div>';
+    if (d.canPlan) h += '<div class="panel"><button class="btn sec" type="button" data-all="1">📋 كل خطط القرآن</button></div>';
+    h += '<div id="cbox"></div>';
+    main(h);
+    $('main').onclick = function (e) {
+      var q = e.target.closest('[data-qc]'); if (q) { quranClassView(q.dataset.qc); return; }
+      var p = e.target.closest('[data-plan]'); if (p) { caseView('quran', p.dataset.plan, quranHome); return; }
+      var n = e.target.closest('[data-new]'); if (n) { ensureMeta('quran', function () { caseForm('quran', null, { subjectLabel: n.dataset.nm }); }); return; }
+      if (e.target.closest('[data-all]')) caseListView('quran', 'open', quranHome);
+    };
+  });
+}
+function quranClassView(cls) {
+  loading();
+  call('quranClass', [ME.code, cls], function (d) {
+    var names = d.names;
+    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📖 ' + esc(d.cls) + '</h3><div class="sub">' + esc(d.level || '') + ' • ' + esc(d.term) + ' — أعمدة القرآن بس</div>' +
+      '<div class="tw"><table><thead><tr><th>الطالب</th>' + names.map(function (n) { return '<th>' + esc(n[1]) + '<br><small>آخر 3</small></th>'; }).join('') +
+      d.sessions.map(function (n) { return '<th>ح' + n + '<br><small>حفظ</small></th>'; }).join('') + '<th>اختبار</th><th>دعم؟</th></tr></thead><tbody>' +
+      d.students.map(function (s) { return '<tr><td style="text-align:right">' + esc(s.name) + (s.quran ? '<br><small>' + esc(s.quran) + '</small>' : '') + '</td>' +
+        names.map(function (n) { var v = s.avg[n[0]]; return '<td>' + (v == null ? '—' : sc(Math.round(v)).replace(/>\d</, '>' + v + '<')) + '</td>'; }).join('') +
+        d.sessions.map(function (n) { var p = s.per[n]; return '<td>' + (p ? (p.hifz !== '' ? sc(p.hifz) : '<small>' + esc(p.att) + '</small>') : '—') + '</td>'; }).join('') +
+        '<td>' + (s.lastExam && s.lastExam.quran != null ? s.lastExam.quran : '—') + '</td><td>' + (s.decision ? '<span class="pill ' + (s.decision === 'نعم' ? 'no' : 'ok') + '">' + esc(s.decision) + '</span>' : '—') + '</td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+    main(h);
+    $('main').onclick = function (e) { if (e.target.closest('[data-b]')) quranHome(); };
+  });
+}
+
+// ======================================================================
+//                               لوحة الجودة
+// ======================================================================
+function qualityHome() {
+  loading();
+  call('qualityBoard', [ME.code], function (d) {
+    var groups = {};
+    d.items.forEach(function (it) { (groups[it.role] = groups[it.role] || []).push(it); });
+    var roles = Object.keys(groups);
+    var h = '<div class="panel"><h3>✅ لوحة الجودة</h3><div class="sub">كل حاجة فات ميعادها من غير متابعة. الأقدم فوق.</div><div class="stats">' +
+      '<div class="stat"><b>' + d.items.length + '</b><span>بند متأخر</span></div><div class="stat"><b>' + roles.length + '</b><span>أدوار</span></div><div class="stat"><b>' +
+      d.items.filter(function (i) { return i.notes.length; }).length + '</b><span>عليها ملاحظة</span></div></div></div>';
+    if (!d.items.length) h += '<div class="panel empty">مفيش حاجة متأخرة 👏</div>';
+    roles.forEach(function (r) {
+      h += '<div class="panel"><h3>' + esc(r) + ' (' + groups[r].length + ')</h3>' + groups[r].map(function (it) {
+        var c = it.ref.indexOf('case|') === 0 || it.ref.indexOf('esc|') === 0 ? it.ref.split('|') : null;
+        return '<div class="ur" style="align-items:flex-start"><span><b' + (c ? ' style="cursor:pointer;color:var(--c)" data-case="' + esc(c[1] + '|' + c[2]) + '"' : '') + '>' + esc(it.title) + '</b><br><small style="color:var(--m)">' + esc(it.detail) +
+          (it.days != null ? ' • من ' + it.days + ' يوم' : '') + '</small>' + it.notes.map(function (n) { return '<div class="note"><b>' + esc(n.byName) + ' ' + esc(n.time) + ':</b> ' + esc(n.note) + '</div>'; }).join('') + '</span>' +
+          (d.canNote ? '<button class="btn ghost" type="button" data-note="' + esc(it.ref) + '" data-t="' + esc(it.title) + '">📝 ملاحظة</button>' : '') + '</div>'; }).join('') + '</div>';
+    });
+    main(h);
+    $('main').onclick = function (e) {
+      var n = e.target.closest('[data-note]');
+      if (n) { var t = prompt('ملاحظة الجودة على: ' + n.dataset.t); if (!t) return; call('qualityNote', [ME.code, n.dataset.note, n.dataset.t, t], function () { toast('اتسجلت ✅'); qualityHome(); }); return; }
+      var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], qualityHome); }
+    };
+  });
+}
+
+// ======================================================================
+//                         الأثر (ليدربورد المربين)
+// ======================================================================
+var IMPACT_PARTS = [['growth', 'نمو الدرجات'], ['exam', 'الميد ← الفاينال'], ['self', 'رأي الطالب في نفسه'], ['plans', 'نتايج الخطط'], ['retention', 'الاستمرار والحضور']];
+function boardHome() {
+  loading();
+  call('leaderboard', [ME.code], function (d) {
+    var bar = function (r) {
+      var me = r.code === d.me;
+      return '<div class="bar" style="' + (me ? 'background:#e3f1f8;border-radius:10px;padding:4px 6px' : '') + '"><span class="nm" style="width:auto;min-width:22px"><b>' + r.rank + '</b></span><span style="flex:0 0 120px;font-size:13px">' + esc(r.name) + (me ? ' (إنت)' : '') + '</span>' +
+        '<div class="tr"><div class="fl" style="width:' + r.pct + '%"></div></div><span class="vl">' + r.pct + '</span></div>' +
+        (r.parts ? '<div class="line" style="margin:0 0 6px">' + IMPACT_PARTS.map(function (p) { var v = r.parts[p[0]]; return v == null ? '' : '<span class="pill">' + p[1] + ' ' + v + '</span>'; }).join('') + '</div>' : ''); };
+    var h = '<div class="panel"><h3>🏆 أثر المربين</h3><div class="sub">الترتيب بأثر المربي في طلابه، مش بمواعيده: نمو درجاتهم (أول 3 حلقات مقابل آخر 3)، الفرق بين الميد والفاينال، رأيهم في نفسهم أول وآخر الترم، نتايج الخطط، واستمرارهم وحضورهم. ' +
+      'الأوزان: ' + IMPACT_PARTS.map(function (p) { return p[1] + ' ' + d.weights[p[0]]; }).join('، ') + '. 50 = الطالب فضل زي ما هو، وفوق 50 = اتحسن.</div></div>';
+    if (d.overall.length) h += '<div class="panel"><h3>الكل</h3>' + d.overall.map(bar).join('') + (!d.full && d.overallTotal > d.overall.length ? '<div class="sub">من ' + d.overallTotal + ' مربي</div>' : '') + '</div>';
+    d.boards.forEach(function (b) {
+      h += '<div class="panel"><h3>' + esc(b.program) + ' <small style="color:var(--m);font-weight:normal">' + esc(b.term) + '</small></h3>' + (b.rows.length ? b.rows.map(bar).join('') : '') +
+        (b.pending.length ? '<div class="sub">لسه مفيش بيانات كفاية للحكم (محتاج 6 تقييمات على الأقل للطالب، أو ميد وفاينال): ' + b.pending.map(function (p) { return esc(p.name); }).join('، ') + '</div>' : '') + '</div>';
+    });
+    if (!d.boards.length) h += '<div class="panel empty">لسه مفيش بيانات كفاية.</div>';
+    main(h);
+  });
+}
+
+// ======================================================================
+//                             التقرير الشهري
+// ======================================================================
+function monthlyView(month) {
+  loading();
+  call('monthlyReport', [ME.code, month], function (r) {
+    var stat = function (v, l) { return '<div class="stat"><b>' + (v == null ? '—' : v) + '</b><span>' + l + '</span></div>'; };
+    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><div class="row"><h3 style="margin:0">📊 التقرير الشهري</h3><input type="month" id="mm" value="' + esc(r.month) + '" style="width:auto"></div>' +
+      '<div class="sub">' + esc(r.scope) + '</div><div class="stats">' + stat(r.sessions.total, 'حلقات اتسجلت') + stat(r.sessions.total ? Math.round(r.sessions.onTime / r.sessions.total * 100) + '%' : null, 'في ميعادها') + stat(r.attendance == null ? null : r.attendance + '%', 'الحضور') + '</div>' +
+      '<div class="stats">' + stat(r.visits, 'زيارات') + stat(r.exams, 'اختبارات اتسجلت') + stat(r.support, 'محتاجين دعم حفظ') + '</div>' +
+      '<h3 style="margin-top:10px">📈 متوسط المعايير</h3>' + r.criteriaNames.map(function (c) { var v = r.criteria[c[0]];
+        return '<div class="bar"><span class="nm">' + esc(c[1]) + '</span><div class="tr"><div class="fl" style="width:' + (v ? v / 5 * 100 : 0) + '%"></div></div><span class="vl">' + (v == null ? '—' : v) + '</span></div>'; }).join('') +
+      '<h3 style="margin-top:10px">📂 الخطط والحالات</h3><div class="tw"><table><thead><tr><th>النوع</th><th>اتفتح</th><th>اتقفل</th><th>اتحقق</th><th>متابعات</th><th>مفتوح دلوقتي</th></tr></thead><tbody>' +
+      r.kinds.map(function (k) { return '<tr><td style="text-align:right">' + esc(k.title) + '</td><td>' + k.opened + '</td><td>' + k.closed + '</td><td>' + k.achieved + '</td><td>' + k.followups + '</td><td>' + k.open + '</td></tr>'; }).join('') +
+      '</tbody></table></div><div class="line"><span class="pill">ملاحظات سلوكية في الحلقات: ' + r.behaviorNotes + '</span><span class="pill">حلقات ببديل: ' + r.sessions.substitute + '</span></div></div>';
+    var ta = function (k, l) { return '<div class="f"><label class="lb">' + l + ':</label><textarea id="mt-' + k + '"' + (r.canEdit ? '' : ' disabled') + '>' + esc(r.text[k]) + '</textarea></div>'; };
+    h += '<div class="panel"><h3>✍️ من الهيد</h3>' + ta('achievements', 'الإنجازات') + ta('challenges', 'التحديات') + ta('recommendations', 'التوصيات') +
+      (r.text.by ? '<div class="sub">آخر تعديل: ' + esc(r.text.by) + ' ' + esc(r.text.time) + '</div>' : '') +
+      '<div class="row">' + (r.canEdit ? '<button class="btn" type="button" data-s="1">حفظ ✅</button>' : '') + '<button class="btn sec" type="button" data-p="1">🖨️ طباعة / PDF</button></div></div>';
+    main(h);
+    $('main').onclick = function (e) {
+      if (e.target.closest('[data-b]')) { acadHome(); return; }
+      if (e.target.closest('[data-p]')) { window.print(); return; }
+      var s = e.target.closest('[data-s]'); if (s) { busy(s, '⏳'); call('saveMonthly', [ME.code, r.month, { achievements: $('mt-achievements').value, challenges: $('mt-challenges').value, recommendations: $('mt-recommendations').value }],
+        function () { busy(s); Sound.play('ok'); toast('اتحفظ ✅'); }, function (er) { busy(s); failed(er); }); }
+    };
+    $('mm').onchange = function () { monthlyView(this.value); };
+  });
+}
+
+// ======================================================================
+//                           الترمات (الأدمن)
+// ======================================================================
+function termsPanel() {
+  var box = $('terms-box'); if (!box) return;
+  call('adminTerms', [ME.code], function (d) {
+    ST.terms = d;
+    box.innerHTML = '<div class="panel"><div class="row"><h3 style="margin:0">🗓️ الترمات</h3><button class="btn sm" type="button" data-tn="1" style="flex:0 0 auto">➕ ترم جديد</button></div>' +
+      d.terms.map(function (t) { return '<div class="ur"><span><b>' + esc(t.name) + '</b> <small style="color:var(--m)">' + esc(t.code) + ' • ' + esc((d.programs.filter(function (p) { return p.code === t.program; })[0] || {}).name || t.program) +
+        ' • من ' + esc(t.start) + ' • ' + t.weeks + ' أسبوع × ' + t.days + ' • ميد أ' + (t.mid || '—') + ' • فاينال أ' + (t.final || '—') + '</small></span><span style="white-space:nowrap"><span class="pill ' + (t.status === 'حالي' ? 'ok' : '') + '">' + esc(t.status) + '</span> ' +
+        '<button class="btn ghost" type="button" data-te="' + esc(t.code) + '">تعديل</button></span></div>'; }).join('') + '<div id="tform"></div></div>';
+    box.onclick = function (e) { var a = e.target.closest('[data-te]'); if (a) termForm(d.terms.filter(function (t) { return t.code === a.dataset.te; })[0]); if (e.target.closest('[data-tn]')) termForm(null); };
+  });
+}
+function termForm(t) {
+  var d = ST.terms, x = t || { code: '', program: '', name: '', start: '', weeks: 12, days: 1, mid: '', final: '', supportWeeks: '', familyWeeks: '', status: 'قادم' };
+  var inp = function (k, l, type, extra) { return '<div class="f"><label class="lb">' + l + ':</label><input type="' + (type || 'text') + '" id="t-' + k + '" value="' + esc(x[k] == null ? '' : x[k]) + '"' + (extra || '') + '></div>'; };
+  $('tform').innerHTML = '<div class="panel" style="box-shadow:none;border:1px solid var(--ln)"><h3>' + (t ? 'تعديل ' + esc(t.name) : 'ترم جديد') + '</h3>' +
+    '<div class="row">' + inp('code', 'كود الترم (إنجليزي)', 'text', t ? ' disabled' : '') + '<div class="f"><label class="lb">البرنامج:</label><select id="t-program">' + opts(d.programs.map(function (p) { return { v: p.code, l: p.name }; }), x.program, '— اختار —') + '</select></div></div>' +
+    inp('name', 'اسم الترم') + '<div class="row">' + inp('start', 'تاريخ البداية', 'date') + inp('weeks', 'عدد الأسابيع', 'number') + inp('days', 'حلقات في الأسبوع', 'number') + '</div>' +
+    '<div class="row">' + inp('mid', 'أسبوع الميد', 'number') + inp('final', 'أسبوع الفاينال', 'number') + '</div>' +
+    '<div class="row">' + inp('supportWeeks', 'أسابيع دعم الحفظ (زي 4, 8)') + inp('familyWeeks', 'أسابيع نشاط الأسرة') + '</div>' +
+    inp('startWeek', 'أول أسبوع على السيستم (للترم اللي بدأ قبل السيستم)', 'number') +
+    '<div class="f"><label class="lb">الحالة:</label><select id="t-status">' + opts(['حالي', 'قادم', 'مقفول'], x.status) + '</select></div>' +
+    '<div class="sub">لو خليته «حالي»، أي ترم حالي تاني لنفس البرنامج بيتقفل لوحده.</div><div class="row"><button class="btn" type="button" id="t-save">حفظ ✅</button><button class="btn sec" type="button" id="t-cancel">إلغاء</button></div></div>';
+  $('t-cancel').onclick = function () { $('tform').innerHTML = ''; };
+  $('t-save').onclick = function () {
+    var data = { isEdit: !!t }; ['code', 'program', 'name', 'start', 'weeks', 'days', 'mid', 'final', 'supportWeeks', 'familyWeeks', 'status', 'startWeek'].forEach(function (k) { data[k] = $('t-' + k).value.trim(); });
+    var b = this; busy(b, '⏳'); call('adminSaveTerm', [ME.code, data], function () { busy(b); Sound.play('ok'); toast('اتحفظ ✅'); termsPanel(); }, function (e) { busy(b); failed(e); });
+  };
+  $('tform').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ======================================================================
 //                                الأدمن
 // ======================================================================
 function adminHome() {
@@ -736,8 +1066,8 @@ function adminHome() {
     ST.ad = d;
     main('<div class="panel"><div class="row"><h3 style="margin:0">👥 المستخدمين (' + d.users.length + ')</h3><button class="btn sm" type="button" data-a="new" style="flex:0 0 auto">➕ مستخدم جديد</button></div>' +
       '<div class="f" style="margin-top:10px"><input type="text" id="uq" placeholder="بحث بالاسم أو الكود أو الدور"></div><div id="ulist"></div></div><div id="uform"></div>' +
-      '<div class="panel"><h3>🗓️ الترمات</h3>' + d.terms.map(function (t) { return '<div class="ur"><span><b>' + esc(t.name) + '</b> <small style="color:var(--m)">' + esc(t.program) + ' • من ' + esc(t.start) + ' • ' + t.weeks + ' أسبوع × ' + t.days + ' • ميد أ' + (t.mid || '—') + ' • فاينال أ' + (t.final || '—') + '</small></span><span class="pill ' + (t.status === 'حالي' ? 'ok' : '') + '">' + esc(t.status) + '</span></div>'; }).join('') +
-      '<div class="sub" style="margin-top:8px">إعدادات الترم (الاسم، الأسابيع، الميد والفاينال) بتتعدل دلوقتي من تاب «الترمات» في الشيت.</div></div>');
+      '<div id="terms-box"></div>');
+    termsPanel();
     userList('');
     var m = $('main');
     m.oninput = function (e) { if (e.target.id === 'uq') userList(e.target.value); };
