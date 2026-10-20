@@ -104,7 +104,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 4px
 var API_URL = 'https://script.google.com/macros/s/AKfycbxMaU2MpXEFYy2rHQOLLWH_9wAHpfthVP5zTXWCN6QgVHxBD-50BVQ3KeydDspvrzGorw/exec';
 var LOGOS = { teens: 'logo-teens.svg', dar: 'logo-dar.svg' };
 var ME = null, VIEW = '', ST = {};
-var VIEWS = { coach: '📋 حلقاتي', follow: '📊 المتابعة', admin: '⚙️ الأدمن' };
+var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', admin: '⚙️ الأدمن' };
 
 // ---------- أصوات ----------
 var Sound = { ctx: null, on: true,
@@ -181,19 +181,19 @@ function go(v) {
 // ======================================================================
 function coachHome() {
   var cs = ME.classes;
-  main('<div class="panel"><h3>📋 حلقاتي</h3>' + (cs.length ? cs.map(function (c) {
+  main('<div class="panel"><h3>📋 مجموعاتي</h3>' + (cs.length ? cs.map(function (c) {
       return '<div class="cls ok" data-cls="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
         (c.hasTerm ? ' • ' + esc(c.term) : ' • <span class="pill wait">مفيش ترم حالي</span>') + '</div></div>';
-    }).join('') : '<div class="empty">مفيش حلقات مسجلة باسمك.</div>') +
+    }).join('') : '<div class="empty">مفيش مجموعات مسجلة باسمك.</div>') +
     '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button></div><div id="sub-list"></div>');
   $('main').onclick = function (e) {
     var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, null, c.dataset.sub === '1'); return; }
     if (e.target.id === 'sub-btn') {
       $('sub-list').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
       call('substituteClasses', [ME.code], function (list) {
-        $('sub-list').innerHTML = '<div class="panel"><h3>اختار الحلقة اللي هتغطيها</h3>' + (list.length ? list.map(function (c) {
+        $('sub-list').innerHTML = '<div class="panel"><h3>اختار المجموعة اللي هتغطيها</h3>' + (list.length ? list.map(function (c) {
           return '<div class="cls" data-cls="' + esc(c.name) + '" data-sub="1"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + '</div></div>'; }).join('')
-          : '<div class="empty">مفيش حلقات تانية في فرعك.</div>') + '</div>';
+          : '<div class="empty">مفيش مجموعات تانية في فرعك.</div>') + '</div>';
       });
     }
   };
@@ -209,28 +209,27 @@ function openSession(cls, n, sub) {
 
 function sessionLabel(s) {
   var st = { done: '✅', cancelled: '🚫', open: '', future: '⏳' }[s.status];
-  return 'جلسة ' + s.n + ' — أسبوع ' + s.week + (s.mid ? ' • ميد' : '') + (s.final ? ' • فاينال' : '') + ' ' + st;
+  return 'حلقة ' + s.n + ' — أسبوع ' + s.week + (s.mid ? ' • ميد' : '') + (s.final ? ' • فاينال' : '') + ' ' + st;
 }
 
 function renderSession() {
   var r = ST.s, s = r.session;
-  var head = '<button class="back" type="button" data-act="home">→ رجوع لحلقاتي</button>' +
+  var head = '<button class="back" type="button" data-act="home">→ رجوع لمجموعاتي</button>' +
     '<div class="panel"><div class="row"><div><h3 style="margin:0">' + esc(r.cls) + (r.mode === 'بديل' ? ' <span class="pill wait">بديل</span>' : '') + '</h3>' +
     '<div class="sub" style="margin:2px 0 0">' + esc(r.program) + ' • ' + esc(r.level || '') + ' • ' + esc(r.term.name) + '</div></div>' +
     '<button class="btn sm sec" type="button" data-act="history" style="flex:0 0 auto">🗂️ تقييماتي السابقة</button></div>' +
     '<div class="f" style="margin:10px 0 0"><select id="sess">' + r.sessions.map(function (x) { return '<option value="' + x.n + '"' + (x.n === s.n ? ' selected' : '') + (x.status === 'cancelled' ? ' disabled' : '') + '>' + sessionLabel(x) + '</option>'; }).join('') + '</select></div></div>';
   var info = '';
-  if (r.plan) info += '<div class="info"><b>🎯 أهداف الجلسة' + (r.plan.surah ? ' — ' + esc(r.plan.surah) : '') + '</b>' + (r.plan.idea ? '<div>' + esc(r.plan.idea) + '</div>' : '') +
-    '<div class="line"><span class="pill c">معرفة</span> ' + esc(r.plan.maarifa || '—') + '</div><div class="line"><span class="pill c">وجدان</span> ' + esc(r.plan.wijdan || '—') + '</div><div class="line"><span class="pill c">عمل</span> ' + esc(r.plan.amal || '—') + '</div></div>';
+  if (s.family) info += '<div class="info">🏠 الأسبوع ده فيه نشاط أسرة — علّم لكل طالب عمله ولا لأ.</div>';
   if (s.mid || s.final) info += '<div class="info">📝 الأسبوع ده أسبوع ' + (s.mid ? 'الميد ترم' : 'الفاينال') + '.</div>';
   if (r.readonly) { main(head + info + savedHTML(r)); bindSession(); return; }
   var body = '<div class="panel"><div class="row"><div class="f" style="margin:0"><label class="lb" for="sdate">تاريخ الحلقة:</label><input type="date" id="sdate" value="' + esc(ST.date) + '" max="' + esc(r.today) + '"></div>' +
     '<div style="flex:0 0 auto;font-size:13px;color:var(--m)">' + r.students.length + ' طالب</div></div></div>';
   body += r.students.map(function (st) { return studentHTML(st); }).join('');
   body += ST.guests.map(function (g) { return studentHTML(g, true); }).join('');
-  body += '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-act="guest">➕ طالب زائر من حلقة تانية</button><button class="btn sm sec" type="button" data-act="newst">🆕 طالب جديد</button></div><div id="guest-box"></div></div>';
+  body += '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-act="guest">➕ طالب زائر من مجموعة تانية</button><button class="btn sm sec" type="button" data-act="newst">🆕 طالب جديد</button></div><div id="guest-box"></div></div>';
   body += tasksHTML();
-  body += '<div class="sticky"><button class="btn" type="button" data-act="save" id="save-btn">حفظ الجلسة ✅</button></div>';
+  body += '<div class="sticky"><button class="btn" type="button" data-act="save" id="save-btn">حفظ الحلقة ✅</button></div>';
   main(head + info + body); bindSession();
 }
 
@@ -258,7 +257,7 @@ function studentHTML(st, guest) {
   if (rated || guest) {
     var g = '';
     critsFor(st).forEach(function (c) { if (c.group !== g) { g = c.group; h += '<div class="grp">' + (g === 'قرآن' ? '📖 القرآن' : '💡 المحتوى') + '</div>'; } h += critHTML(st.code, c, row.scores[c.key]); });
-    h += '<div class="fu">' + ME.followups.map(function (f) { var v = row.follow[f[0]]; return '<button type="button" data-act="fu" data-s="' + esc(st.code) + '" data-f="' + f[0] + '" class="' + (v === 'تم' ? 'y' : v === 'لم يتم' ? 'n' : '') + '">' + (v === 'تم' ? '✓ ' : v === 'لم يتم' ? '✗ ' : '') + f[1] + '</button>'; }).join('') +
+    h += '<div class="fu">' + (ST.s.session.family ? ME.followups : []).map(function (f) { var v = row.follow[f[0]]; return '<button type="button" data-act="fu" data-s="' + esc(st.code) + '" data-f="' + f[0] + '" class="' + (v === 'تم' ? 'y' : v === 'لم يتم' ? 'n' : '') + '">' + (v === 'تم' ? '✓ ' : v === 'لم يتم' ? '✗ ' : '') + f[1] + '</button>'; }).join('') +
       '<button type="button" data-act="beh" data-s="' + esc(st.code) + '" class="' + (row.behavior ? 'n' : '') + '">⚑ ملاحظة سلوكية</button></div>';
     if (row.behavior !== '' || row._showBeh) h += '<div class="f" style="margin-top:6px"><input type="text" data-in="behavior" data-s="' + esc(st.code) + '" value="' + esc(row.behavior) + '" placeholder="الموقف باختصار (بيوصل لأخصائي السلوك لو اتكرر)"></div>';
     h += '<div class="f" style="margin:6px 0 0"><textarea data-in="notes" data-s="' + esc(st.code) + '" placeholder="ملاحظات (اختياري)">' + esc(row.notes) + '</textarea></div>';
@@ -374,7 +373,7 @@ function savedHTML(r) {
   var h = '<div class="panel"><div class="line"><span class="pill ok">✅ اتسجلت</span><span class="pill">' + esc(sv.date) + '</span><span class="pill">' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + '</span><span class="pill">حاضر ' + sv.present + '</span><span class="pill">غائب ' + sv.absent + '</span><span class="pill ' + (sv.timing === 'في ميعاده' ? 'ok' : sv.timing === 'متأخر' ? 'wait' : 'no') + '">' + esc(sv.timing) + '</span></div>' +
     '<div class="line">' + ME.tasks.map(function (t) { var ok = sv.tasks[t[0]] === 'تم'; return '<span class="pill ' + (ok ? 'ok' : 'wait') + '">' + (ok ? '✓ ' : '⏳ ') + t[1] + '</span>'; }).join('') + '</div>' +
     (pend.length ? '<div class="task" style="flex-wrap:wrap">' + pend.map(function (t) { return '<button type="button" class="y" data-act="ptask" data-t="' + t[0] + '">✅ ' + t[1] + ' تم</button>'; }).join('') + '<button class="btn sm" type="button" data-act="confirm-tasks">تأكيد</button></div>' : '') +
-    '<div class="sub" style="margin:8px 0 0">الجلسة دي للقراءة بس. لو في غلط اطلب من المنسق يصححه.</div></div>';
+    '<div class="sub" style="margin:8px 0 0">الحلقة دي للقراءة بس. لو في غلط اطلب من المنسق يصححه.</div></div>';
   var keys = r.criteria.map(function (c) { return c.key; });
   h += '<div class="panel"><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
     sv.students.map(function (s) { return '<tr><td style="text-align:right">' + esc(s.name) + (s.guestFrom ? ' <small>(زائر)</small>' : '') + '</td><td>' + esc(s.att) + '</td>' + keys.map(function (k) { return '<td>' + sc(s.scores[k]) + '</td>'; }).join('') + '</tr>'; }).join('') +
@@ -389,10 +388,10 @@ function confirmTasks() {
 function history() {
   var cls = ST.s.cls; loading();
   call('myHistory', [ME.code, cls, ST.sub], function (h) {
-    main('<button class="back" type="button" id="hb">→ رجوع للجلسة</button><div class="panel"><h3>🗂️ تقييماتي السابقة — ' + esc(cls) + '</h3><div class="sub">' + esc(h.term || '') + '</div>' +
+    main('<button class="back" type="button" id="hb">→ رجوع للحلقة</button><div class="panel"><h3>🗂️ تقييماتي السابقة — ' + esc(cls) + '</h3><div class="sub">' + esc(h.term || '') + '</div>' +
       (h.sessions.length ? h.sessions.map(function (s) { var pend = ME.tasks.some(function (t) { return s.tasks[t[0]] === 'لم يتم'; });
-        return '<div class="cls ' + (pend ? 'warn' : 'ok') + '" data-n="' + s.n + '"><h4>جلسة ' + s.n + ' — أسبوع ' + s.week + '</h4><div class="m">' + esc(s.date) + ' • ' + esc(s.coach) + (s.mode === 'بديل' ? ' (بديل)' : '') +
-          ' • حاضر ' + s.present + ' • غائب ' + s.absent + ' • ' + esc(s.timing) + (pend ? ' • <span class="pill wait">مهام مستنية</span>' : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش جلسات متسجلة.</div>') + '</div>');
+        return '<div class="cls ' + (pend ? 'warn' : 'ok') + '" data-n="' + s.n + '"><h4>حلقة ' + s.n + ' — أسبوع ' + s.week + '</h4><div class="m">' + esc(s.date) + ' • ' + esc(s.coach) + (s.mode === 'بديل' ? ' (بديل)' : '') +
+          ' • حاضر ' + s.present + ' • غائب ' + s.absent + ' • ' + esc(s.timing) + (pend ? ' • <span class="pill wait">مهام مستنية</span>' : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>');
     $('main').onclick = function (e) { if (e.target.id === 'hb') { openSession(cls, null, ST.sub); return; } var c = e.target.closest('[data-n]'); if (c) openSession(cls, Number(c.dataset.n), ST.sub); };
   });
 }
@@ -409,8 +408,8 @@ function followHome(off) {
     var done = sessions.filter(function (s) { return s.log; }).length;
     var h = '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-w="' + (off - 1) + '">→ الأسبوع اللي فات</button><div style="text-align:center;font-weight:bold;color:var(--c)">' +
       (off === 0 ? 'الأسبوع الحالي' : off < 0 ? 'قبل ' + (-off) + ' أسبوع' : 'بعد ' + off + ' أسبوع') + '</div><button class="btn sm sec" type="button" data-w="' + (off + 1) + '"' + (off >= 0 ? ' disabled' : '') + '>الأسبوع الجاي ←</button></div></div>' +
-      '<div class="stats"><div class="stat"><b>' + done + '/' + sessions.length + '</b><span>جلسات اتسجلت</span></div><div class="stat"><b>' + late + '</b><span>متأخرة / فائتة</span></div><div class="stat"><b>' + (total ? Math.round(present / total * 100) + '%' : '—') + '</b><span>الحضور</span></div></div>';
-    h += list.length ? list.map(classCardHTML).join('') : '<div class="panel empty">مفيش حلقات ضمن صلاحياتك.</div>';
+      '<div class="stats"><div class="stat"><b>' + done + '/' + sessions.length + '</b><span>حلقات اتسجلت</span></div><div class="stat"><b>' + late + '</b><span>متأخرة / فائتة</span></div><div class="stat"><b>' + (total ? Math.round(present / total * 100) + '%' : '—') + '</b><span>الحضور</span></div></div>';
+    h += list.length ? list.map(classCardHTML).join('') : '<div class="panel empty">مفيش مجموعات ضمن صلاحياتك.</div>';
     main(h);
     $('main').onclick = function (e) { var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
   });
@@ -422,10 +421,10 @@ function classCardHTML(c) {
   var tasksPend = ss.some(function (s) { return s.log && ME.tasks.some(function (t) { return s.log.tasks[t[0]] === 'لم يتم'; }); }) || c.oldPendingTasks > 0;
   var cls = missing ? 'late' : (tasksPend || c.pending ? 'warn' : 'ok');
   return '<div class="cls ' + cls + '" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + ' • أسبوع ' + c.week + ' • 👤 ' + esc(c.coaches.join(' • ') || '—') + '</div>' +
-    '<div class="line"><span class="k">الجلسات</span>' + (c.sessions.length ? c.sessions.map(function (s) {
-      if (s.status === 'cancelled') return '<span class="pill">🚫 ج' + s.n + '</span>';
-      if (s.log) return '<span class="pill ' + (s.log.timing === 'في ميعاده' ? 'ok' : 'wait') + '">✓ ج' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + '</span>';
-      return '<span class="pill ' + (s.status === 'open' ? 'no' : '') + '">' + (s.status === 'open' ? '⏳' : '…') + ' ج' + s.n + '</span>'; }).join('') : '—') + '</div>' +
+    '<div class="line"><span class="k">الحلقات</span>' + (c.sessions.length ? c.sessions.map(function (s) {
+      if (s.status === 'cancelled') return '<span class="pill">🚫 ح' + s.n + '</span>';
+      if (s.log) return '<span class="pill ' + (s.log.timing === 'في ميعاده' ? 'ok' : 'wait') + '">✓ ح' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + '</span>';
+      return '<span class="pill ' + (s.status === 'open' ? 'no' : '') + '">' + (s.status === 'open' ? '⏳' : '…') + ' ح' + s.n + '</span>'; }).join('') : '—') + '</div>' +
     (tasksPend ? '<div class="line"><span class="k">المهام</span><span class="pill wait">في مهام لسه «لم يتم»</span></div>' : '') +
     (c.pending ? '<div class="line"><span class="k">طلاب</span><span class="pill wait">' + c.pending + ' مستني تأكيد</span></div>' : '') +
     '<div class="line"><span class="k">آخر زيارة</span>' + (c.lastVisit ? 'أسبوع ' + esc(c.lastVisit.week) + ' — ' + esc(c.lastVisit.by) : '<span class="pill">مفيش لسه</span>') + '</div></div>';
@@ -437,27 +436,27 @@ function followClass(cls) {
     ST.fc = d;
     var done = d.sessions.filter(function (s) { return s.status === 'done'; });
     var h = '<button class="back" type="button" data-a="back">→ رجوع للوحة</button><div class="panel"><h3>' + esc(d.cls) + '</h3><div class="sub">' + esc(d.level || '') + ' • ' + esc(d.term) + ' • 👤 ' + esc(d.coaches.join(' • ')) + '</div>' +
-      '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 تقييم زيارة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء جلسة</button></div></div>';
+      '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 تقييم زيارة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء حلقة</button></div></div>';
     if (d.pending.length) h += '<div class="panel"><h3>🆕 طلاب مستنيين تأكيد</h3>' + d.pending.map(function (p) {
-      return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من جلسة ' + esc(p.from) + '</small></span><span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span></div>'; }).join('') + '</div>';
+      return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span><span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span></div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>👥 الطلاب (' + d.students.filter(function (s) { return s.status !== 'منسحب' && s.status !== 'مرفوض'; }).length + ')</h3>' + d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
-      return '<div class="ur' + (s.status === 'منسحب' ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ج' + esc(s.until) + ')</small>' : '') +
+      return '<div class="ur' + (s.status === 'منسحب' ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : '') +
         ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center">' +
         '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px">' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
         (s.status !== 'منسحب' ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
-    h += '<div class="panel"><h3>🗓️ الجلسات المسجلة</h3>' + (done.length ? done.map(function (s) { return '<button class="btn sm sec" type="button" data-a="sess" data-n="' + s.n + '" style="margin:3px">ج' + s.n + '</button>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div><div id="fbox"></div>';
+    h += '<div class="panel"><h3>🗓️ الحلقات المسجلة</h3>' + (done.length ? done.map(function (s) { return '<button class="btn sm sec" type="button" data-a="sess" data-n="' + s.n + '" style="margin:3px">ح' + s.n + '</button>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div><div id="fbox"></div>';
     main(h);
     var m = $('main');
     m.onclick = function (e) { var b = e.target.closest('[data-a]'); if (!b) return; e.preventDefault(); var a = b.dataset.a;
       if (a === 'back') followHome(FW);
       else if (a === 'confirm' || a === 'reject') call('setEnrollment', [ME.code, cls, b.dataset.c, a], function () { Sound.play('ok'); followClass(cls); });
-      else if (a === 'withdraw') { var n = prompt('انسحب من أنهي جلسة؟ (رقم الجلسة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
+      else if (a === 'withdraw') { var n = prompt('انسحب من أنهي حلقة؟ (رقم الحلقة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
       else if (a === 'report') report(b.dataset.c);
       else if (a === 'birth') { var v = prompt('تاريخ الميلاد (زي 2019-05-14) أو السنة بس:', b.dataset.b || ''); if (v == null) return;
         call('setEnrollment', [ME.code, cls, b.dataset.c, 'birth', v.trim()], function (r) { Sound.play('ok'); toast(r.age ? 'اتسجل — ' + r.age + ' سنين' : 'اتمسح'); followClass(cls); }); }
       else if (a === 'sess') followSession(cls, Number(b.dataset.n));
       else if (a === 'visit') visitForm(cls);
-      else if (a === 'cancel') { var x = prompt('رقم الجلسة اللي هتتلغي:'); if (!x) return; var why = prompt('السبب (إجازة، ظرف…):') || 'ملغية';
+      else if (a === 'cancel') { var x = prompt('رقم الحلقة اللي هتتلغي:'); if (!x) return; var why = prompt('السبب (إجازة، ظرف…):') || 'ملغية';
         call('cancelSession', [ME.code, cls, x, why, false], function () { toast('اتلغت 🚫'); followClass(cls); }); }
       else if (a === 'vsc') { ST.visit[b.dataset.c] = Number(b.dataset.v); [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); Sound.play('lv' + b.dataset.v); }
       else if (a === 'vsave') saveVisit(cls);
@@ -470,7 +469,7 @@ function followSession(cls, n) {
   $('fbox').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
   call('followSession', [ME.code, cls, n], function (d) {
     ST.fs = d; var sv = d.saved;
-    $('fbox').innerHTML = '<div class="panel"><h3>جلسة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • ' + esc(sv.timing) + '</h3><div class="sub">اضغط على أي درجة علشان تصححها (التعديل بيتسجل).</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
+    $('fbox').innerHTML = '<div class="panel"><h3>حلقة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • ' + esc(sv.timing) + '</h3><div class="sub">اضغط على أي درجة علشان تصححها (التعديل بيتسجل).</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
       d.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' + sv.students.map(function (s) {
         return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(s.att) + '</td>' + d.criteria.map(function (c) {
           return '<td class="ed" data-a="cell" data-st="' + esc(s.code) + '" data-k="' + c.key + '" data-n="' + n + '">' + sc(s.scores[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
@@ -504,14 +503,14 @@ function report(code) {
         (g != null ? ' <small style="color:' + (g > 0 ? 'var(--l5)' : g < 0 ? 'var(--l1)' : 'var(--m)') + '">' + (g > 0 ? '▲' : g < 0 ? '▼' : '•') + Math.abs(g) + '</small>' : '') + '</span></div>'; }).join('');
     var a = r.attendance;
     $('fbox').innerHTML = '<div class="panel"><h3>👤 ' + esc(r.student) + ' <small style="color:var(--m);font-weight:normal">— ' + esc(r.cls) + (r.quran ? ' • ' + esc(r.quran) : '') + ' • ' + (r.age ? r.age + ' سنين' + (r.ageEstimated ? ' (تقديري)' : '') : 'السن مش متسجل') + '</small></h3>' +
-      '<div class="stats"><div class="stat"><b>' + (r.attendanceRate == null ? '—' : r.attendanceRate + '%') + '</b><span>الحضور</span></div><div class="stat"><b>' + r.total + '</b><span>جلسات</span></div><div class="stat"><b>' + a['غائب'] + '</b><span>غياب</span></div></div>' +
+      '<div class="stats"><div class="stat"><b>' + (r.attendanceRate == null ? '—' : r.attendanceRate + '%') + '</b><span>الحضور</span></div><div class="stat"><b>' + r.total + '</b><span>حلقات</span></div><div class="stat"><b>' + a['غائب'] + '</b><span>غياب</span></div></div>' +
       '<div class="line">' + Object.keys(a).map(function (k) { return '<span class="pill">' + k + ' ' + a[k] + '</span>'; }).join('') + '</div>' +
       '<h3 style="margin-top:14px">📈 المتوسطات (من 5)</h3>' + bars + '<div class="sub">▲▼ = الفرق بين أول ' + r.minRatings + ' تقييمات وآخر ' + r.minRatings + '. «لم يُلاحظ» مش داخل في المتوسط.</div>' +
       '<div class="line">' + ME.followups.map(function (f) { var x = r.follow[f[0]]; return '<span class="pill">' + f[1] + ': ' + (x.total ? x.done + '/' + x.total : '—') + '</span>'; }).join('') + '</div>' +
-      '<h3 style="margin-top:14px">🗓️ آخر الجلسات</h3><div class="tw"><table><thead><tr><th>ج</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      '<h3 style="margin-top:14px">🗓️ آخر الحلقات</h3><div class="tw"><table><thead><tr><th>ح</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       r.sessions.map(function (s) { return '<tr><td>' + s.n + '</td><td>' + esc(s.att) + (s.guestFrom ? '*' : '') + '</td>' + r.criteria.map(function (c) { return '<td>' + sc(s[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-      (r.behavior.length ? '<h3 style="margin-top:14px">⚑ ملاحظات سلوكية</h3>' + r.behavior.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ج' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') +
-      (r.notes.length ? '<h3 style="margin-top:14px">📝 ملاحظات المربين</h3>' + r.notes.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ج' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') + '</div>';
+      (r.behavior.length ? '<h3 style="margin-top:14px">⚑ ملاحظات سلوكية</h3>' + r.behavior.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') +
+      (r.notes.length ? '<h3 style="margin-top:14px">📝 ملاحظات المربين</h3>' + r.notes.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') + '</div>';
     $('fbox').scrollIntoView({ behavior: 'smooth' });
   }, function (e) { $('fbox').innerHTML = '<div class="panel empty">' + esc(e.message) + '</div>'; });
 }
@@ -552,7 +551,7 @@ function userForm(code) {
     '<div class="f"><label class="lb">الأدوار:</label><div class="chk">' + d.roles.map(function (r) { var on = u.roles.indexOf(r) !== -1; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" value="' + esc(r) + '"' + (on ? ' checked' : '') + '>' + esc(r) + '</label>'; }).join('') + '</div></div>' +
     '<div class="row"><div class="f"><label class="lb">الفرع:</label><select id="u-branch">' + opts(d.branches.map(function (b) { return { v: b.code, l: b.name }; }), u.branch, 'كل الفروع') + '</select></div>' +
     '<div class="f"><label class="lb">القسم:</label><select id="u-section">' + opts(d.sections.map(function (s) { return { v: s.code, l: s.name }; }), u.section, 'كل الأقسام') + '</select></div></div>' +
-    '<div class="f"><label class="lb">الحلقات (اختياري، مفصولة بفاصلة — فاضي = كل حلقات النطاق):</label><input type="text" id="u-classes" value="' + esc(u.classes) + '" list="cl-list"><datalist id="cl-list">' + d.classes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
+    '<div class="f"><label class="lb">المجموعات (اختياري، مفصولة بفاصلة — فاضي = كل مجموعات النطاق):</label><input type="text" id="u-classes" value="' + esc(u.classes) + '" list="cl-list"><datalist id="cl-list">' + d.classes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
     '<div class="row"><div class="f"><label class="lb">نوع التعاقد:</label><select id="u-contract">' + opts(['فول تايم', 'بارت تايم', 'متطوع'], u.contract, '—') + '</select></div><div class="f"><label class="lb">الإيميل (للدخول بحساب Google بعدين):</label><input type="email" id="u-email" value="' + esc(u.email) + '"></div></div>' +
     '<div class="row"><button class="btn" type="button" data-a="usave" id="usave">حفظ ✅</button><button class="btn sec" type="button" data-a="ucancel">إلغاء</button></div></div>';
   $('uform').scrollIntoView({ behavior: 'smooth' });
