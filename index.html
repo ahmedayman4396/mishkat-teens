@@ -249,7 +249,7 @@ function renderSession() {
     '<div class="panel"><div class="row"><div><h3 style="margin:0">' + esc(r.cls) + (r.mode === 'بديل' ? ' <span class="pill wait">بديل</span>' : '') + '</h3>' +
     '<div class="sub" style="margin:2px 0 0">' + esc(r.program) + ' • ' + esc(r.level || '') + ' • ' + esc(r.term.name) + '</div></div>' +
     '<button class="btn sm sec" type="button" data-act="history" style="flex:0 0 auto">🗂️ تقييماتي السابقة</button></div>' +
-    '<div class="row" style="margin-top:8px"><button class="btn sm' + (s.mid || s.final ? '' : ' sec') + '" type="button" data-act="exam">📝 الميد / الفاينال</button><button class="btn sm sec" type="button" data-act="self">🙋 التقييم الذاتي</button></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn sm' + (s.mid || s.final ? '' : ' sec') + '" type="button" data-act="exam">📝 الميد / الفاينال</button></div>' +
     '<div class="f" style="margin:10px 0 0"><select id="sess">' + r.sessions.map(function (x) { return '<option value="' + x.n + '"' + (x.n === s.n ? ' selected' : '') + (x.status === 'cancelled' || x.status === 'before' ? ' disabled' : '') + '>' + sessionLabel(x) + '</option>'; }).join('') + '</select></div></div>';
   var info = '';
   if (s.family) info += '<div class="info">🏠 الأسبوع ده فيه نشاط أسرة — علّم لكل طالب عمله ولا لأ.</div>';
@@ -346,8 +346,7 @@ function bindSession() {
     var a = b.dataset.act, row = b.dataset.s ? rowOf(b.dataset.s) : null;
     if (a === 'home') { coachHome(); return; }
     if (a === 'history') { history(); return; }
-    if (a === 'exam' || a === 'self') { var rc = ST.s.cls, rs = ST.sub, bk = function () { openSession(rc, null, rs); };
-      if (a === 'exam') openExam(rc, '', bk, rs); else openSelf(rc, '', bk, rs); return; }
+    if (a === 'exam') { var rc = ST.s.cls, rs = ST.sub; openExam(rc, '', function () { openSession(rc, null, rs); }, rs); return; }
     if (a === 'att') { row.att = b.dataset.v; }
     else if (a === 'age') { ST.openAge = ST.openAge === b.dataset.s ? null : b.dataset.s; }
     else if (a === 'score') { row.scores[b.dataset.c] = b.dataset.v === 'na' ? ME.notObserved : Number(b.dataset.v); Sound.play(b.dataset.v === 'na' ? 'tap' : 'lv' + b.dataset.v); updateStudent(b.dataset.s); return; }
@@ -489,10 +488,9 @@ function followClass(cls) {
     var h = '<button class="back" type="button" data-a="back">→ رجوع للوحة</button><div class="panel"><h3>' + esc(d.cls) + '</h3><div class="sub">' + esc(d.level || '') + ' • ' + esc(d.term) + ' • 👤 ' + esc(d.coaches.join(' • ')) + '</div>' +
       '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 تقييم زيارة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء حلقة</button></div></div>';
     if (d.examSummary) { var es = d.examSummary;
-      h += '<div class="panel"><h3>📝 الاختبارات والتقييم الذاتي</h3><div class="line"><span class="k">الاختبارات</span>' + Object.keys(es.exams).map(function (k) { var x = es.exams[k];
+      h += '<div class="panel"><h3>📝 الاختبارات</h3><div class="line"><span class="k">الاختبارات</span>' + Object.keys(es.exams).map(function (k) { var x = es.exams[k];
           return '<span class="pill ' + (x.done >= x.total && x.total ? 'ok' : x.done ? 'wait' : '') + '">' + esc(k) + ' ' + x.done + '/' + x.total + '</span>'; }).join('') + '</div>' +
-        '<div class="line"><span class="k">ذاتي</span>' + Object.keys(es.self).map(function (k) { return '<span class="pill ' + (es.self[k] >= es.students && es.students ? 'ok' : es.self[k] ? 'wait' : '') + '">' + esc(k) + ' ' + es.self[k] + '/' + es.students + '</span>'; }).join('') + '</div>' +
-        '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-a="exam">📝 الميد / الفاينال</button><button class="btn sm sec" type="button" data-a="self">🙋 التقييم الذاتي</button></div></div>'; }
+        '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-a="exam">📝 الميد / الفاينال</button></div></div>'; }
     if (d.pending.length) h += '<div class="panel"><h3>🆕 طلاب مستنيين تأكيد</h3>' + d.pending.map(function (p) {
       return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span><span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span></div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>👥 الطلاب (' + d.students.filter(function (s) { return s.status !== 'منسحب' && s.status !== 'مرفوض'; }).length + ')</h3>' + d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
@@ -513,7 +511,6 @@ function followClass(cls) {
       else if (a === 'sess') followSession(cls, Number(b.dataset.n));
       else if (a === 'visit') visitForm(cls);
       else if (a === 'exam') openExam(cls, '', function () { followClass(cls); }, false);
-      else if (a === 'self') openSelf(cls, '', function () { followClass(cls); }, false);
       else if (a === 'cancel') { var x = prompt('رقم الحلقة اللي هتتلغي:'); if (!x) return; var why = prompt('السبب (إجازة، ظرف…):') || 'ملغية';
         call('cancelSession', [ME.code, cls, x, why, false], function () { toast('اتلغت 🚫'); followClass(cls); }); }
       else if (a === 'vsc') { ST.visit[b.dataset.c] = Number(b.dataset.v); [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); Sound.play('lv' + b.dataset.v);
@@ -576,7 +573,7 @@ function report(code) {
 }
 
 // ======================================================================
-//                    الميد والفاينال + التقييم الذاتي
+//                           الميد والفاينال
 // ======================================================================
 function lvRow(label, code, key, val, levels, act, labels) {
   var b = [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" data-x="' + act + '" data-s="' + esc(code) + '" data-k="' + esc(key) + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '"' + (labels ? ' style="font-size:11.5px;font-weight:normal"' : '') + '>' + (labels ? esc(labels[v - 1]) : v) + '</button>'; }).join('');
@@ -693,76 +690,16 @@ function saveExamRow(code, btn) {
   }, function (e) { busy(btn); failed(e); });
 }
 
-// ---------- التقييم الذاتي ----------
-function openSelf(cls, when, back, sub, openCode) {
-  loading();
-  if (back) { ST.exBack = back; ST.exSub = !!sub; }
-  call('selfForm', [ME.code, cls, when || '', ST.exSub], function (d) {
-    ST.sf = { d: d, rows: {}, open: openCode === undefined ? null : openCode };
-    d.students.forEach(function (s) { var sv = d.saved[s.code]; ST.sf.rows[s.code] = { g: Object.assign({}, sv ? sv.g : {}), note: sv ? sv.note || '' : '' }; });
-    renderSelf(); if (ST.sf.open) scrollToSt(ST.sf.open);
-  }, function (e) { failed(e); ST.exBack(); });
-}
-function renderSelf() {
-  var d = ST.sf.d, done = Object.keys(d.saved).length;
-  var h = '<button class="back" type="button" data-x="back">→ رجوع</button><div class="panel"><div class="row"><div><h3 style="margin:0">🙋 تقييم الطالب لنفسه — ' + esc(d.cls) + '</h3>' +
-    '<div class="sub" style="margin:2px 0 0">' + esc(d.term) + '</div></div><select id="sfsel" style="width:auto;flex:0 0 auto">' + opts(d.whens, d.when) + '</select></div>' +
-    '<div class="line"><span class="pill ' + (done === d.students.length ? 'ok' : 'wait') + '">اتسجل ' + done + ' من ' + d.students.length + '</span></div>' +
-    '<div class="info" style="margin:8px 0 0">الطالب مش بيدخل على السيستم. اسأله السؤال شفوي (أو على ورقة) وسجّل إنت إجابته هنا — مفيش إجابة صح وغلط، ماتقترحش عليه. الصغيرين (4–6) إجابتهم من 3 اختيارات بس.</div></div>';
-  main(h + d.students.map(selfStudentHTML).join('')); bindSelf();
-}
-function selfStudentHTML(st) {
-  var x = ST.sf, d = x.d, sv = d.saved[st.code], open = x.open === st.code, b = d.bands[st.band], r = x.rows[st.code];
-  var h = '<div class="st' + (sv ? ' done' : '') + '" data-st="' + esc(st.code) + '">' + stHead(st, open, sv ? '<span class="pill ok">✅</span>' : '<span class="pill">لسه</span>');
-  if (!open) return h + '</div>';
-  b.domains.forEach(function (g) {
-    h += '<div class="desc" style="margin-top:10px;font-weight:600;color:#333">' + esc(g.q) + '</div>';
-    var sl = scaleOf('self', st.band);
-    if (b.three) h += '<div class="lv" style="margin-top:4px">' + [1, 3, 5].map(function (v) { return '<button type="button" data-x="sg" data-s="' + esc(st.code) + '" data-k="' + esc(g.key) + '" data-v="' + v + '" class="' + (r.g[g.key] === v ? 'on' : '') + '" style="font-size:12.5px;font-weight:normal;padding:8px 2px">' + esc(sl && sl[v - 1] ? sl[v - 1] : v) + '</button>'; }).join('') + '</div>';
-    else h += lvRow('', st.code, g.key, r.g[g.key], sl, 'sg', d.scale).replace('<div class="crit-t"></div>', '');
-  });
-  h += '<div class="f" style="margin:8px 0 0"><textarea data-in="note" data-s="' + esc(st.code) + '" placeholder="كلمة الطالب عن نفسه (اختياري)">' + esc(r.note) + '</textarea></div>' +
-    '<button class="btn" type="button" data-x="save" data-s="' + esc(st.code) + '" style="margin-top:8px">' + (sv ? 'حفظ التعديل ✏️' : 'حفظ ✅') + '</button>';
-  return h + '</div>';
-}
-function bindSelf() {
-  var m = $('main'), x = ST.sf;
-  m.onclick = function (e) {
-    var b = e.target.closest('[data-x]'); if (!b) return;
-    var a = b.dataset.x, code = b.dataset.s, r = code ? x.rows[code] : null;
-    if (a === 'back') { ST.exBack(); return; }
-    if (a === 'open') { x.open = x.open === code ? null : code; Sound.play('tap'); keepScroll(renderSelf); if (x.open) scrollToSt(code); return; }
-    if (a === 'save') { saveSelfRow(code, b); return; }
-    if (a === 'sg') { r.g[b.dataset.k] = Number(b.dataset.v); Sound.play('lv' + b.dataset.v);
-      var el = document.querySelector('.st[data-st="' + CSS.escape(code) + '"]'), st = x.d.students.filter(function (s) { return s.code === code; })[0];
-      var t = document.createElement('div'); t.innerHTML = selfStudentHTML(st); el.replaceWith(t.firstChild); }
-  };
-  m.oninput = function (e) { var el = e.target; if (el.dataset.in && el.dataset.s) x.rows[el.dataset.s][el.dataset.in] = el.value; };
-  m.onchange = function (e) { if (e.target.id === 'sfsel') openSelf(x.d.cls, e.target.value); };
-}
-function saveSelfRow(code, btn) {
-  var x = ST.sf, d = x.d, r = x.rows[code], st = d.students.filter(function (s) { return s.code === code; })[0], b = d.bands[st.band];
-  var miss = b.domains.filter(function (g) { return !r.g[g.key]; });
-  if (miss.length) { Sound.play('err'); toast('ناقص ' + miss.length + ' سؤال'); return; }
-  busy(btn, 'جاري الحفظ… ⏳');
-  call('saveSelf', [ME.code, d.cls, d.when, code, { g: r.g, note: r.note }, ST.exSub], function () {
-    Sound.play('ok'); toast('اتحفظ ✅ ' + st.name); d.saved[code] = true; openSelf(d.cls, d.when, null, null, nextOpen(d.students, d.saved, code));
-  }, function (e) { busy(btn); failed(e); });
-}
-
 // ---------- في التقرير ----------
 function examReportHTML(x) {
-  if (!x || (!x.exams.length && !x.selfCount)) return '';
+  if (!x || !x.exams.length) return '';
   var h = '';
   if (x.exams.length) h += '<h3 style="margin-top:14px">📝 الاختبارات</h3><div class="line">' + x.exams.map(function (e) {
     return '<span class="pill ' + (e.att === 'حاضر' ? 'c' : 'wait') + '">' + esc(e.exam) + ': ' + (e.att === 'حاضر' ? (e.total == null ? '—' : '<bdi>' + e.total + '%</bdi>') : esc(e.att)) + '</span>'; }).join('') + '</div>';
-  if (x.profile.some(function (p) { return p.coach != null || p.self != null; })) {
-    h += '<h3 style="margin-top:14px">🌱 النمو: المربي مقابل الطالب</h3>' + x.profile.map(function (p) {
-      var bar = function (v, c) { return '<div class="tr" style="height:7px;margin:2px 0"><div class="fl" style="width:' + (v ? v / 5 * 100 : 0) + '%;background:' + c + '"></div></div>'; };
-      var gs = p.self != null && p.selfStart != null && x.selfCount > 1 ? p.self - p.selfStart : null;
-      return '<div class="bar"><span class="nm">' + esc(p.name) + '</span><div style="flex:1">' + bar(p.coach, 'var(--c)') + bar(p.self, 'var(--l3)') + '</div><span class="vl">' +
-        (p.coach == null ? '—' : p.coach) + ' / ' + (p.self == null ? '—' : p.self) + (gs ? ' <small style="color:' + (gs > 0 ? 'var(--l5)' : 'var(--l1)') + '">' + (gs > 0 ? '▲' : '▼') + Math.abs(gs) + '</small>' : '') + '</span></div>'; }).join('') +
-      '<div class="sub">الأزرق = المربي (' + esc(x.profileFrom || 'لسه') + ')، الأصفر = الطالب في آخر تقييم ذاتي (▲▼ = تغيّره عن أول مرة). لو الفرق بينهم كبير، يستاهل كلام مع الطالب.</div>';
+  if (x.profile.some(function (p) { return p.coach != null; })) {
+    h += '<h3 style="margin-top:14px">🌱 مجالات النمو</h3>' + x.profile.map(function (p) {
+      return '<div class="bar"><span class="nm">' + esc(p.name) + '</span><div class="tr"><div class="fl" style="width:' + (p.coach ? p.coach / 5 * 100 : 0) + '%"></div></div><span class="vl">' + (p.coach == null ? '—' : p.coach) + '</span></div>'; }).join('') +
+      '<div class="sub">تقييم المربي في ' + esc(x.profileFrom || 'آخر اختبار') + '، من 5.</div>';
   }
   return h;
 }
@@ -1007,7 +944,7 @@ function qualityHome() {
 // ======================================================================
 //                         الأثر (ليدربورد المربين)
 // ======================================================================
-var IMPACT_PARTS = [['growth', 'نمو الدرجات'], ['exam', 'الميد ← الفاينال'], ['self', 'رأي الطالب في نفسه'], ['plans', 'نتايج الخطط'], ['retention', 'الاستمرار والحضور']];
+var IMPACT_PARTS = [['growth', 'نمو الدرجات'], ['exam', 'الميد ← الفاينال'], ['plans', 'نتايج الخطط'], ['retention', 'الاستمرار والحضور']];
 function boardHome() {
   loading();
   call('leaderboard', [ME.code], function (d) {
@@ -1016,7 +953,7 @@ function boardHome() {
       return '<div class="bar" style="' + (me ? 'background:#e3f1f8;border-radius:10px;padding:4px 6px' : '') + '"><span class="nm" style="width:auto;min-width:22px"><b>' + r.rank + '</b></span><span style="flex:0 0 120px;font-size:13px">' + esc(r.name) + (me ? ' (إنت)' : '') + '</span>' +
         '<div class="tr"><div class="fl" style="width:' + r.pct + '%"></div></div><span class="vl">' + r.pct + '</span></div>' +
         (r.parts ? '<div class="line" style="margin:0 0 6px">' + IMPACT_PARTS.map(function (p) { var v = r.parts[p[0]]; return v == null ? '' : '<span class="pill">' + p[1] + ' ' + v + '</span>'; }).join('') + '</div>' : ''); };
-    var h = '<div class="panel"><h3>🏆 أثر المربين</h3><div class="sub">الترتيب بأثر المربي في طلابه، مش بمواعيده: نمو درجاتهم (أول 3 حلقات مقابل آخر 3)، الفرق بين الميد والفاينال، رأيهم في نفسهم أول وآخر الترم، نتايج الخطط، واستمرارهم وحضورهم. ' +
+    var h = '<div class="panel"><h3>🏆 أثر المربين</h3><div class="sub">الترتيب بأثر المربي في طلابه، مش بمواعيده: نمو درجاتهم (أول 3 حلقات مقابل آخر 3)، الفرق بين الميد والفاينال، نتايج الخطط، واستمرارهم وحضورهم. ' +
       'الأوزان: ' + IMPACT_PARTS.map(function (p) { return p[1] + ' ' + d.weights[p[0]]; }).join('، ') + '. 50 = الطالب فضل زي ما هو، وفوق 50 = اتحسن.</div></div>';
     if (d.overall.length) h += '<div class="panel"><h3>الكل</h3>' + d.overall.map(bar).join('') + (!d.full && d.overallTotal > d.overall.length ? '<div class="sub">من ' + d.overallTotal + ' مربي</div>' : '') + '</div>';
     d.boards.forEach(function (b) {
