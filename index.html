@@ -124,13 +124,40 @@ function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 var tt; function toast(t) { var e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(function () { e.classList.remove('show'); }, 3000); }
 function busy(b, t) { if (!b) return; if (!b.dataset.l) b.dataset.l = b.textContent; b.disabled = !!t; b.textContent = t || b.dataset.l; }
+// ---------- دخول Google (للبيانات الحساسة بس) ----------
+var TOK = (function () { var t = store('mk_tok'); return t && tokExp(t) > Date.now() ? t : ''; })();
+function tokExp(t) { try { var p = t.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'); return Number(decodeURIComponent(escape(atob(p))).split('|')[1]) || 0; } catch (e) { return 0; } }
+function tokEmail(t) { try { var p = t.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(p))).split('|')[0]; } catch (e) { return ''; } }
+function googleSignIn(after) {
+  if (!ME || !ME.auth || !ME.auth.url) { toast('الدخول بحساب Google لسه مش متجهز — كلّم الأدمن'); return; }
+  var w = window.open(ME.auth.url, 'mkauth', 'width=480,height=620');
+  if (!w) { toast('المتصفح منع النافذة — اسمح بالنوافذ المنبثقة وجرّب تاني'); return; }
+  var on = function (e) {
+    if (!/(\.googleusercontent\.com|script\.google\.com)$/.test(e.origin) || !e.data || e.data.mkAuth === undefined) return;
+    window.removeEventListener('message', on);
+    if (!e.data.mkAuth) { failed(new Error('مقدرناش نعرف حسابك على Google')); return; }
+    TOK = e.data.mkAuth; store('mk_tok', TOK); Sound.play('ok'); toast('🔐 دخلت بـ ' + e.data.email);
+    if (after) after(); else go(VIEW);
+  };
+  window.addEventListener('message', on);
+}
+function googleBtn(label) { return '<button class="btn sm" type="button" data-google="1" style="flex:0 0 auto">🔐 ' + (label || 'ادخل بحساب Google') + '</button>'; }
+document.addEventListener('click', function (e) { if (e.target.closest('[data-google]')) { e.stopPropagation(); googleSignIn(); } }, true);
 function call(fn, args, ok, fail) {
-  fetch(API_URL, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+  fetch(API_URL, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK }) })
     .then(function (r) { return r.json(); })
     .then(function (r) { if (r.ok) ok(r.data); else (fail || failed)(new Error(r.error)); })
     .catch(function () { (fail || failed)(new Error('تعذر الاتصال، اتأكد من الإنترنت وجرب تاني')); });
 }
-function failed(e) { Sound.play('err'); toast('⚠️ ' + e.message); }
+function failed(e) {
+  Sound.play('err');
+  if (String(e.message).indexOf('GOOGLE_REQUIRED|') === 0) {
+    var msg = e.message.split('|')[1] + (TOK ? ' — إنت داخل بـ ' + tokEmail(TOK) + '، والإيميل ده مش هو المسجّل باسمك.' : '');
+    main('<div class="panel"><h3>🔐 محتاج دخول بحساب Google</h3><div class="sub">' + esc(msg) + '</div><div class="row" style="margin-top:10px">' + googleBtn() + '</div></div>');
+    return;
+  }
+  toast('⚠️ ' + e.message);
+}
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
 function sc(v) { var n = Number(v); return n >= 1 && n <= 5 ? '<span class="s' + n + '">' + n + '</span>' : (v ? '<small>' + esc(v === 'لم يُلاحظ' ? 'ل' : v) + '</small>' : '—'); }
 function opts(list, cur, ph) { return (ph ? '<option value="">' + ph + '</option>' : '') + list.map(function (x) { var v = typeof x === 'object' ? x.v : x, l = typeof x === 'object' ? x.l : x; return '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); }
@@ -171,7 +198,7 @@ function login(silent) {
     go(r.views[0]);
   }, function (e) { busy(b); msg.textContent = e.message; msg.classList.add('show'); Sound.play('err'); });
 }
-function logout() { ME = null; store('mk_code', null); $('code').value = ''; $('v-app').classList.add('hidden'); $('v-login').classList.remove('hidden'); }
+function logout() { ME = null; store('mk_code', null); TOK = ''; store('mk_tok', null); $('code').value = ''; $('v-app').classList.add('hidden'); $('v-login').classList.remove('hidden'); }
 function go(v) {
   VIEW = v;
   [].forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.v === v); });
@@ -756,7 +783,11 @@ function caseRow(c) {
 function acadHome() {
   loading();
   call('casesHome', [ME.code], function (d) {
-    var h = '<div class="panel"><h3>🎓 الخطط والحالات</h3>' + d.kinds.map(function (k) {
+    var au = d.auth || {};
+    var h = '<div class="panel"><h3>🎓 الخطط والحالات</h3>' + (au.on ? '<div class="row" style="margin-bottom:8px"><div class="sub" style="margin:0">' +
+        (au.ok ? '🔐 داخل بحساب Google: ' + esc(au.signedIn) : (au.signedIn ? '⚠️ إنت داخل بـ ' + esc(au.signedIn) + ' والمسجّل باسمك ' + esc(au.registered || '(مفيش إيميل)') : '🔒 خطط المربين والسلوك والشكاوى محتاجة دخول بحساب Google')) +
+        '</div>' + (au.ok ? '' : googleBtn()) + '</div>' : '') + d.kinds.map(function (k) {
+      if (k.locked) return '<div class="cls" data-google="1"><h4>🔒 ' + esc(k.title) + '</h4><div class="m">محتاجة دخول بحساب Google</div></div>';
       return '<div class="cls ' + (k.overdue || k.escalated ? 'late' : k.open ? 'warn' : 'ok') + '" data-kind="' + k.kind + '"><h4>' + k.icon + ' ' + esc(k.title) + '</h4><div class="line">' +
         '<span class="pill">مفتوحة ' + k.open + '</span>' + (k.overdue ? '<span class="pill no">متابعة متأخرة ' + k.overdue + '</span>' : '') +
         (k.escalated ? '<span class="pill no">مستنية رد الإدارة ' + k.escalated + '</span>' : '') + (k.canEdit ? '' : '<span class="pill">قراءة</span>') + '</div></div>'; }).join('') + '</div>';
@@ -892,7 +923,9 @@ function loadTodo() {
   var box = $('todo'); if (!box) return;
   call('myTodo', [ME.code], function (list) {
     if (!list.length) { box.innerHTML = ''; return; }
-    box.innerHTML = '<div class="panel"><h3>📌 المطلوب منك</h3><div class="sub">خطط مفتوحة على طلابك أو خطة تطويرك — افتحها ونفّذ المطلوب وسجّله.</div>' + list.map(caseRow).join('') + '</div>';
+    var lk = list.filter(function (x) { return x.kind === 'locked'; })[0]; list = list.filter(function (x) { return x.kind !== 'locked'; });
+    box.innerHTML = '<div class="panel"><h3>📌 المطلوب منك</h3><div class="sub">خطط مفتوحة على طلابك أو خطة تطويرك — افتحها ونفّذ المطلوب وسجّله.</div>' + list.map(caseRow).join('') +
+      (lk ? '<div class="row" style="margin-top:8px"><div class="sub" style="margin:0">🔒 فيه ' + lk.hidden + ' (خطة تطويرك) محتاجة دخول بحساب Google</div>' + googleBtn('افتح') + '</div>' : '') + '</div>';
     box.onclick = function (e) { var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], coachHome); } };
   }, function () { box.innerHTML = ''; });
 }
@@ -953,6 +986,7 @@ function qualityHome() {
     var h = '<div class="panel"><h3>✅ لوحة الجودة</h3><div class="sub">كل حاجة فات ميعادها من غير متابعة. الأقدم فوق.</div><div class="stats">' +
       '<div class="stat"><b>' + d.items.length + '</b><span>بند متأخر</span></div><div class="stat"><b>' + roles.length + '</b><span>أدوار</span></div><div class="stat"><b>' +
       d.items.filter(function (i) { return i.notes.length; }).length + '</b><span>عليها ملاحظة</span></div></div></div>';
+    if (d.hiddenSensitive) h += '<div class="panel"><div class="row"><div class="sub" style="margin:0">🔒 فيه ' + d.hiddenSensitive + ' بند من خطط المربين والسلوك والشكاوى مستخبي لحد ما تدخل بحساب Google.</div>' + googleBtn() + '</div></div>';
     if (!d.items.length) h += '<div class="panel empty">مفيش حاجة متأخرة 👏</div>';
     roles.forEach(function (r) {
       h += '<div class="panel"><h3>' + esc(r) + ' (' + groups[r].length + ')</h3>' + groups[r].map(function (it) {
