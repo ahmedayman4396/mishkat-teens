@@ -156,6 +156,7 @@ function failed(e) {
     main('<div class="panel"><h3>🔐 محتاج دخول بحساب Google</h3><div class="sub">' + esc(msg) + '</div><div class="row" style="margin-top:10px">' + googleBtn() + '</div></div>');
     return;
   }
+  if (ME && String(e.message).indexOf('الكود غير صحيح') === 0) { logout(); var lm = $('login-msg'); lm.textContent = 'الكود اتغيّر أو اتوقف — ادخل تاني بالكود الجديد'; lm.classList.add('show'); return; }
   toast('⚠️ ' + e.message);
 }
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
@@ -188,7 +189,7 @@ function login(silent) {
   call('login', [code], function (r) {
     busy(b);
     if (!r.success) { store('mk_code', null); msg.textContent = r.message; msg.classList.add('show'); Sound.play('err'); return; }
-    ME = r; store('mk_code', code); Sound.play('ok');
+    ME = r; ME.code = code; store('mk_code', code); Sound.play('ok');
     $('hello').textContent = 'أهلاً، ' + r.name;
     $('v-login').classList.add('hidden'); $('v-app').classList.remove('hidden');
     $('tabs').innerHTML = r.views.map(function (v) { return '<button type="button" data-v="' + v + '">' + VIEWS[v] + '</button>'; }).join('');
