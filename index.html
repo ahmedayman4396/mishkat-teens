@@ -216,10 +216,11 @@ function coachHome() {
       return '<div class="cls ok" data-cls="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
         (c.hasTerm ? ' • ' + esc(c.term) : ' • <span class="pill wait">مفيش ترم حالي</span>') + '</div></div>';
     }).join('') : '<div class="empty">مفيش مجموعات مسجلة باسمك.</div>') +
-    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button></div><div id="sub-list"></div><div id="todo"></div>');
+    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button> <button class="btn sec" type="button" id="myq-btn">🕌 تقييماتي من قسم القرآن</button></div><div id="sub-list"></div><div id="todo"></div>');
   loadTodo();
   $('main').onclick = function (e) {
     var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, null, c.dataset.sub === '1'); return; }
+    if (e.target.id === 'myq-btn') { myQuranEvals(); return; }
     if (e.target.id === 'sub-btn') {
       $('sub-list').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
       call('substituteClasses', [ME.code], function (list) {
@@ -271,8 +272,11 @@ function allLv(levels) {
   if (!levels || !levels.some(function (x) { return x; })) return '';
   return '<details class="scl"><summary>ⓘ معنى الدرجات</summary>' + levels.map(function (t, i) { return t ? '<div><b>' + (i + 1) + '</b>' + esc(t) + '</div>' : ''; }).join('') + '</details>';
 }
+function threeLv(levels) { return !!(levels && levels[0] && !levels[1] && levels[2] && !levels[3] && levels[4]); }
+function lvShort(levels, v) { return String(levels[v - 1] || v).split(' — ')[0]; }
 function critHTML(code, c, val) {
-  var lv = [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" data-act="score" data-s="' + esc(code) + '" data-c="' + c.key + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '">' + v + '</button>'; }).join('') +
+  var three = threeLv(c.levels);
+  var lv = (three ? [1, 3, 5] : [1, 2, 3, 4, 5]).map(function (v) { return '<button type="button" data-act="score" data-s="' + esc(code) + '" data-c="' + c.key + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '"' + (three ? ' style="font-size:12px;width:auto;padding:0 10px"' : '') + '>' + (three ? esc(lvShort(c.levels, v)) : v) + '</button>'; }).join('') +
     '<button type="button" class="na' + (val === ME.notObserved ? ' on' : '') + '" data-act="score" data-s="' + esc(code) + '" data-c="' + c.key + '" data-v="na">لم يُلاحظ</button>';
   var d = Number(val) >= 1 ? c.levels[Number(val) - 1] : (val === ME.notObserved ? 'مش داخل في المتوسط' : '');
   return '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(c.name) + '</div><div class="lv">' + lv + '</div></div>' + (d ? '<div class="desc">' + esc(d) + '</div>' : '') + allLv(c.levels) + '</div>';
@@ -577,7 +581,9 @@ function report(code) {
 //                           الميد والفاينال
 // ======================================================================
 function lvRow(label, code, key, val, levels, act, labels) {
-  var b = [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" data-x="' + act + '" data-s="' + esc(code) + '" data-k="' + esc(key) + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '"' + (labels ? ' style="font-size:11.5px;font-weight:normal"' : '') + '>' + (labels ? esc(labels[v - 1]) : v) + '</button>'; }).join('');
+  var three = !labels && threeLv(levels);
+  if (three) labels = levels.map(function (t, i) { return lvShort(levels, i + 1); });
+  var b = (three ? [1, 3, 5] : [1, 2, 3, 4, 5]).map(function (v) { return '<button type="button" data-x="' + act + '" data-s="' + esc(code) + '" data-k="' + esc(key) + '" data-v="' + v + '" class="' + (Number(val) === v ? 'on' : '') + '"' + (labels ? ' style="font-size:11.5px;font-weight:normal"' : '') + '>' + (labels ? esc(labels[v - 1]) : v) + '</button>'; }).join('');
   var d = levels && Number(val) >= 1 ? levels[Number(val) - 1] : '';
   return '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(label) + '</div><div class="lv">' + b + '</div></div>' + (d ? '<div class="desc">' + esc(d) + '</div>' : '') + allLv(levels) + '</div>';
 }
@@ -885,14 +891,88 @@ function quranHome() {
     h += '<div class="panel"><h3>👥 المجموعات</h3>' + d.classes.map(function (c) { return '<div class="cls" data-qc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
       ' • ' + c.students + ' طالب • دعم ' + c.support + (c.supportWeeks.length ? ' • أسابيع الدعم: ' + c.supportWeeks.join('، ') : ' • <span class="pill wait">مفيش أسابيع دعم محددة</span>') + '</div></div>'; }).join('') + '</div>';
     if (d.canPlan) h += '<div class="panel"><button class="btn sec" type="button" data-all="1">📋 كل خطط القرآن</button></div>';
+    h = '<div class="panel"><h3>📝 نماذج قسم القرآن</h3><div class="row"><button class="btn" type="button" data-qf="maqraa">🕌 تقييم مربي المقرأة</button><button class="btn" type="button" data-qf="qvisit">🏫 زيارة فصل القرآن</button></div></div>' + h;
     h += '<div id="cbox"></div>';
     main(h);
     $('main').onclick = function (e) {
       var q = e.target.closest('[data-qc]'); if (q) { quranClassView(q.dataset.qc); return; }
+      var qf = e.target.closest('[data-qf]'); if (qf) { qformView(qf.dataset.qf); return; }
       var p = e.target.closest('[data-plan]'); if (p) { caseView('quran', p.dataset.plan, quranHome); return; }
       var n = e.target.closest('[data-new]'); if (n) { ensureMeta('quran', function () { caseForm('quran', null, { subjectLabel: n.dataset.nm }); }); return; }
       if (e.target.closest('[data-all]')) caseListView('quran', 'open', quranHome);
     };
+  });
+}
+// ---------- نماذج قسم القرآن ----------
+function qScoreRow(it, val) {
+  var lo = ST.qf.form === 'maqraa' ? 0 : 1, vals = []; for (var v = lo; v <= it.max; v++) vals.push(v);
+  var col = function (v) { return 1 + Math.round((v - lo) / Math.max(1, it.max - lo) * 4); };
+  var b = vals.map(function (v) { return '<button type="button" data-qs="' + esc(it.key) + '" data-qv="' + v + '" data-v="' + col(v) + '" class="' + (val === v ? 'on' : '') + '">' + v + '</button>'; }).join('');
+  var d = val >= 1 ? it.levels[val - 1] : (val === 0 ? 'لأ' : '');
+  return '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(it.name) + ' <small style="color:var(--m)">من ' + it.max + '</small></div><div class="lv">' + b + '</div></div>' +
+    (d ? '<div class="desc">' + esc(d) + '</div>' : '') + allLv(it.levels.slice(0, it.max)) + '</div>';
+}
+function qItemsHTML(items, s) {
+  var h = '', ax = '';
+  items.forEach(function (it) { if (it.axis !== ax) { ax = it.axis; h += '<div class="grp">' + esc(ax) + '</div>'; } h += qScoreRow(it, s[it.key]); });
+  return h;
+}
+function qEntryHTML(x, items, showCoach) {
+  return '<details class="ur" style="display:block"><summary style="cursor:pointer"><b>' + esc(x.date) + '</b> — ' + (showCoach ? esc(x.coachName) + ' ' : '') + (x.cls ? '<small>(' + esc(x.cls) + ')</small> ' : '') +
+    '<span class="pill ' + (x.pct >= 75 ? 'ok' : x.pct >= 50 ? '' : 'wait') + '">' + x.total + ' / ' + x.max + ' • ' + x.pct + '%</span> <small style="color:var(--m)">' + esc(x.byName) + '</small></summary>' +
+    items.map(function (it) { var v = x.s[it.key]; return '<div class="line"><span class="k">' + esc(it.name) + '</span><b>' + (v === '' || v == null ? '—' : v) + ' / ' + it.max + '</b> <small>' + esc(Number(v) >= 1 ? it.levels[Number(v) - 1] || '' : '') + '</small></div>'; }).join('') +
+    (x.notes ? '<div class="sub">📝 ' + esc(x.notes) + '</div>' : '') + '</details>';
+}
+function qformView(form) {
+  loading();
+  call('qformList', [ME.code, form], function (d) {
+    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><div class="row"><h3 style="margin:0">' + d.icon + ' ' + esc(d.title) + '</h3>' +
+      (d.canEdit ? '<button class="btn sm" type="button" data-n="1" style="flex:0 0 auto">➕ تقييم جديد</button>' : '') + '</div></div>';
+    h += '<div class="panel"><h3>👥 المربين</h3>' + (d.summary.length ? d.summary.map(function (r) {
+      return '<div class="bar"><span class="nm" style="width:auto;flex:0 0 120px">' + esc(r.name) + '</span><div class="tr"><div class="fl" style="width:' + r.avg + '%"></div></div><span class="vl">' + r.avg + '%</span></div>' +
+        '<div class="sub" style="margin:-4px 0 8px">' + r.n + ' تقييم • آخر مرة ' + esc(r.last) + '</div>'; }).join('') : '<div class="empty">لسه مفيش تقييمات.</div>') + '</div>';
+    if (d.list.length) h += '<div class="panel"><h3>🗂️ آخر التقييمات</h3>' + d.list.map(function (x) { return qEntryHTML(x, d.items, true); }).join('') + '</div>';
+    main(h);
+    $('main').onclick = function (e) { if (e.target.closest('[data-b]')) { quranHome(); return; } if (e.target.closest('[data-n]')) qformNew(form); };
+  });
+}
+function qformNew(form) {
+  loading();
+  call('qformMeta', [ME.code, form], function (d) {
+    ST.qf = { form: form, d: d, s: {}, who: '', date: d.today, notes: '' };
+    var draw = function () {
+      var x = ST.qf, pick = d.target === 'coach'
+        ? '<div class="f"><label class="lb">المربي:</label><select id="qf-who">' + opts(d.coaches.map(function (c) { return { v: c.code, l: c.name }; }), x.who, '— اختار المربي —') + '</select></div>'
+        : '<div class="f"><label class="lb">المجموعة:</label><select id="qf-who">' + opts(d.classes.map(function (c) { return { v: c.name, l: c.name + ' — ' + c.coachName }; }), x.who, '— اختار المجموعة —') + '</select></div>';
+      var done = d.items.filter(function (it) { return x.s[it.key] != null; }).length, tot = 0, mx = 0;
+      d.items.forEach(function (it) { mx += it.max; tot += x.s[it.key] || 0; });
+      main('<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>' + d.icon + ' ' + esc(d.title) + '</h3>' + pick +
+        '<div class="f"><label class="lb">التاريخ:</label><input type="date" id="qf-date" value="' + esc(x.date) + '"></div></div>' +
+        '<div class="panel">' + qItemsHTML(d.items, x.s) + '<div class="f" style="margin-top:10px"><textarea id="qf-notes" placeholder="ملاحظات (اختياري)">' + esc(x.notes) + '</textarea></div>' +
+        '<div class="sub">اتقيّم ' + done + ' من ' + d.items.length + ' • المجموع ' + tot + ' / ' + mx + '</div>' +
+        '<button class="btn" type="button" id="qf-save">حفظ ✅</button></div>');
+    };
+    draw();
+    var m = $('main');
+    m.onchange = function (e) { if (e.target.id === 'qf-who') ST.qf.who = e.target.value; if (e.target.id === 'qf-date') ST.qf.date = e.target.value; };
+    m.oninput = function (e) { if (e.target.id === 'qf-notes') ST.qf.notes = e.target.value; };
+    m.onclick = function (e) {
+      if (e.target.closest('[data-b]')) { qformView(form); return; }
+      var b = e.target.closest('[data-qs]'); if (b) { Sound.play('tap'); ST.qf.s[b.dataset.qs] = Number(b.dataset.qv); var y = window.scrollY; draw(); window.scrollTo(0, y); return; }
+      if (e.target.id === 'qf-save') {
+        var x = ST.qf, data = { date: x.date, s: x.s, notes: x.notes }; if (d.target === 'coach') data.coach = x.who; else data.cls = x.who;
+        var btn = e.target; busy(btn, 'جاري الحفظ… ⏳');
+        call('qformSave', [ME.code, form, data], function (r) { Sound.play('ok'); toast('اتحفظ ✅ ' + r.total + ' / ' + r.max); qformView(form); }, function (er) { busy(btn); failed(er); });
+      }
+    };
+  });
+}
+function myQuranEvals() {
+  loading();
+  call('myQuranEvals', [ME.code], function (d) {
+    var sec = function (t, list, items) { return '<div class="panel"><h3>' + t + '</h3>' + (list.length ? list.map(function (x) { return qEntryHTML(x, items, false); }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div>'; };
+    main('<button class="back" type="button" data-b="1">→ رجوع</button>' + sec('🕌 تقييم المقرأة', d.maqraa, d.maqraaItems) + sec('🏫 زيارات فصل القرآن', d.qvisit, d.qvisitItems));
+    $('main').onclick = function (e) { if (e.target.closest('[data-b]')) coachHome(); };
   });
 }
 function quranClassView(cls) {
