@@ -107,7 +107,7 @@ input.bad{border-color:var(--bad)!important;background:#fdecea!important}
 var API_URL = 'https://script.google.com/macros/s/AKfycbxMaU2MpXEFYy2rHQOLLWH_9wAHpfthVP5zTXWCN6QgVHxBD-50BVQ3KeydDspvrzGorw/exec';
 var LOGOS = { teens: 'logo-teens.svg', dar: 'logo-dar.svg' };
 var ME = null, VIEW = '', ST = {};
-var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', asmt: '📝 التقييمات', meet: '🗓️ حضور المربين', quran: '📖 القرآن', acad: '🎓 الأكاديمي', quality: '✅ الجودة', board: '🏆 الأثر', admin: '⚙️ الأدمن' };
+var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', asmt: '📝 التقييمات', meet: '🗓️ حضور المربين', cert: '📜 الشهادات', quran: '📖 القرآن', acad: '🎓 الأكاديمي', quality: '✅ الجودة', board: '🏆 الأثر', admin: '⚙️ الأدمن' };
 
 // ---------- أصوات ----------
 var Sound = { ctx: null, on: true,
@@ -205,7 +205,7 @@ function go(v) {
   VIEW = v;
   [].forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.v === v); });
   if (v === 'coach') coachHome(); else if (v === 'follow') followHome(0); else if (v === 'admin') adminHome();
-  else if (v === 'quran') quranHome(); else if (v === 'acad') { ST.caseBack = acadHome; acadHome(); } else if (v === 'quality') qualityHome(); else if (v === 'board') boardHome(); else if (v === 'asmt') asmtHome(); else if (v === 'meet') meetHome();
+  else if (v === 'quran') quranHome(); else if (v === 'acad') { ST.caseBack = acadHome; acadHome(); } else if (v === 'quality') qualityHome(); else if (v === 'board') boardHome(); else if (v === 'asmt') asmtHome(); else if (v === 'meet') meetHome(); else if (v === 'cert') certHome();
 }
 
 // ======================================================================
@@ -1544,6 +1544,190 @@ $('out').addEventListener('click', logout);
 $('snd').addEventListener('click', function () { Sound.on = !Sound.on; this.textContent = Sound.on ? '🔊' : '🔇'; store('mk_snd', Sound.on ? '1' : '0'); if (Sound.on) Sound.play('tap'); });
 $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button[data-v]'); if (b) { Sound.play('tap'); go(b.dataset.v); } });
 (function () { if (store('mk_snd') === '0') { Sound.on = false; $('snd').textContent = '🔇'; } var c = store('mk_code'); if (c) { $('code').value = c; login(true); } })();
+// ======================================================================
+//        v5.13: 📜 الشهادات — ميد / فاينال / الترم كله (PDF لكل طالب)
+//   بترسم الشهادة على canvas (العربي بيتشبك صح) وبتعمل PDF و ZIP من غير مكتبات برّه
+// ======================================================================
+var CERT_KINDS = { mid: { t: 'شهادة منتصف الترم', short: 'الميد' }, final: { t: 'شهادة نهاية الترم', short: 'الفاينال' }, all: { t: 'الشهادة الختامية للترم', short: 'الترم كله' } };
+var CERT_THEME = {
+  teens: { logo: 'logo-teens.svg', ar: 451 / 640, c: ['#009cdd', '#45c6f5', '#c4d32b', '#fecd18'], ink: '#0b3c5d', title: '#009cdd' },
+  dar: { logo: 'logo-dar.svg', ar: 1143 / 348, c: ['#2daad9', '#8fd3ec', '#e3b341', '#f3e2b3'], ink: '#123d52', title: '#2daad9' }
+};
+var CERT_FONT = 'Cairo, "Segoe UI", Tahoma, sans-serif';
+var certImg = {};
+function certFont() {
+  if (certFont.p) return certFont.p;
+  certFont.p = new Promise(function (ok) {
+    try {
+      if (!document.getElementById('cert-font')) { var l = document.createElement('link'); l.id = 'cert-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'; document.head.appendChild(l); }
+      var t = setTimeout(ok, 3500);
+      Promise.all(['400 30px Cairo', '700 30px Cairo', '900 30px Cairo'].map(function (f) { return document.fonts.load(f, 'شهادة'); })).then(function () { clearTimeout(t); ok(); }, function () { clearTimeout(t); ok(); });
+    } catch (e) { ok(); }
+  });
+  return certFont.p;
+}
+function certLogo(src) {
+  if (certImg[src]) return certImg[src];
+  certImg[src] = new Promise(function (ok) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { ok(null); }; i.src = src; });
+  return certImg[src];
+}
+// شكل الكلام على حسب نوع المجموعة (بنات / بنين / مش معروف)
+function certWords(g) {
+  return g === true ? { st: 'الطالبة', done: 'قد أتمّت' } : g === false ? { st: 'الطالب', done: 'قد أتمّ' } : { st: 'الطالب/ة', done: 'قد أتمّ/ت' };
+}
+function certHas(s, kind) { var x = s[kind]; return !!(x && (x.quran || x.content || x.overall)); }
+
+function certDraw(d, s, kind) {
+  var W = 1754, H = 1240, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  var th = CERT_THEME[d.section] || CERT_THEME.teens, x = cv.getContext('2d'), w = certWords(d.girls), g = s[kind] || {};
+  return Promise.all([certFont(), certLogo(th.logo)]).then(function (r) {
+    var logo = r[1];
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+    // إطار بألوان اللوجو
+    var bw = (W - 120) / th.c.length;
+    th.c.forEach(function (col, i) { x.fillStyle = col; x.fillRect(60 + i * bw, 40, bw, 18); x.fillRect(60 + (th.c.length - 1 - i) * bw, H - 58, bw, 18); });
+    x.strokeStyle = th.c[0]; x.lineWidth = 4; x.strokeRect(60, 78, W - 120, H - 156);
+    x.strokeStyle = th.c[1]; x.lineWidth = 2; x.strokeRect(76, 94, W - 152, H - 188);
+    // دواير في الأركان
+    [[60, 78], [W - 60, 78], [60, H - 78], [W - 60, H - 78]].forEach(function (p, i) {
+      x.beginPath(); x.fillStyle = th.c[(i + 2) % th.c.length]; x.arc(p[0], p[1], 26, 0, Math.PI * 2); x.fill();
+      x.beginPath(); x.fillStyle = th.c[i % th.c.length]; x.arc(p[0], p[1], 13, 0, Math.PI * 2); x.fill();
+    });
+    if (logo) { var lh = d.section === 'dar' ? 130 : 200, lw = lh * th.ar; x.drawImage(logo, (W - lw) / 2, 120, lw, lh); }
+    x.direction = 'rtl'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    var T = function (txt, y, size, weight, color) { x.font = (weight || 400) + ' ' + size + 'px ' + CERT_FONT; x.fillStyle = color || th.ink; x.fillText(txt, W / 2, y); };
+    var top = d.section === 'dar' ? 330 : 400;
+    T(CERT_KINDS[kind].t, top, 84, 900, th.title);
+    T('تشهد ' + (d.sectionName || '') + ' بأن ' + w.st, top + 90, 38, 400);
+    // الاسم
+    var name = s.name, size = 96; x.font = '900 ' + size + 'px ' + CERT_FONT;
+    while (x.measureText(name).width > W - 360 && size > 50) { size -= 4; x.font = '900 ' + size + 'px ' + CERT_FONT; }
+    T(name, top + 210, size, 900, th.ink);
+    x.strokeStyle = th.c[3] || th.c[2]; x.lineWidth = 6; x.beginPath(); x.moveTo(W / 2 - 380, top + 240); x.lineTo(W / 2 + 380, top + 240); x.stroke();
+    var what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
+    T(w.done + ' ' + what + ' — ' + d.program, top + 310, 36, 400);
+    if (d.year) T('العام الدراسي ' + d.year, top + 362, 32, 400, '#555');
+    // التقديرات
+    var boxes = [['القرآن الكريم', g.quran], ['المنهج', g.content], ['التقدير العام', g.overall]];
+    var bwid = 400, gap = 50, bx0 = (W - (bwid * 3 + gap * 2)) / 2, by = top + 420, bh = 170;
+    boxes.forEach(function (b, i) {
+      var bxp = W - bx0 - (i + 1) * bwid - i * gap, main = i === 2, col = th.c[i === 0 ? 0 : i === 1 ? 2 : 3];
+      x.fillStyle = main ? col : '#ffffff'; x.strokeStyle = col; x.lineWidth = 5;
+      var rr = 26; x.beginPath(); x.moveTo(bxp + rr, by); x.arcTo(bxp + bwid, by, bxp + bwid, by + bh, rr); x.arcTo(bxp + bwid, by + bh, bxp, by + bh, rr); x.arcTo(bxp, by + bh, bxp, by, rr); x.arcTo(bxp, by, bxp + bwid, by, rr); x.closePath(); x.fill(); x.stroke();
+      x.textAlign = 'center'; x.font = '700 34px ' + CERT_FONT; x.fillStyle = main ? th.ink : '#555'; x.fillText(b[0], bxp + bwid / 2, by + 58);
+      x.font = '900 56px ' + CERT_FONT; x.fillStyle = th.ink; x.fillText(b[1] || '—', bxp + bwid / 2, by + 132);
+    });
+    // التوقيعات
+    var sy = H - 190; x.font = '400 30px ' + CERT_FONT; x.fillStyle = '#444';
+    var sig = function (cx, label, who) { x.textAlign = 'center'; x.strokeStyle = '#999'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 190, sy); x.lineTo(cx + 190, sy); x.stroke();
+      x.font = '700 30px ' + CERT_FONT; x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); if (who) { x.font = '400 28px ' + CERT_FONT; x.fillText(who, cx, sy - 16); } };
+    sig(W - 420, d.girls === true ? 'مربية المجموعة' : d.girls === false ? 'مربي المجموعة' : 'مربي/ة المجموعة', d.coach);
+    sig(420, 'مسؤول البرنامج', '');
+    x.textAlign = 'center'; x.font = '400 26px ' + CERT_FONT; x.fillStyle = '#777'; x.fillText(d.cls + ' • ' + new Date().toLocaleDateString('ar-EG-u-nu-latn'), W / 2, sy + 44);
+    return cv;
+  });
+}
+
+// ---------- PDF (صفحة A4 بالعرض فيها صورة الشهادة) ----------
+function b64bytes(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+function certPdf(cv) {
+  var jpg = b64bytes(cv.toDataURL('image/jpeg', 0.92).split(',')[1]), enc = new TextEncoder(), parts = [], off = 0, xref = [];
+  var add = function (p) { var b = typeof p === 'string' ? enc.encode(p) : p; parts.push(b); off += b.length; };
+  var obj = function (n, body, stream) { xref[n] = off; add(n + ' 0 obj\n' + body + '\n'); if (stream) { add('stream\n'); add(stream); add('\nendstream\n'); } add('endobj\n'); };
+  var pw = 842, ph = 595, cs = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im0 Do Q';
+  add('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pw + ' ' + ph + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+  obj(4, '<< /Type /XObject /Subtype /Image /Width ' + cv.width + ' /Height ' + cv.height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpg.length + ' >>', jpg);
+  obj(5, '<< /Length ' + cs.length + ' >>', enc.encode(cs));
+  var xo = off, xs = 'xref\n0 6\n0000000000 65535 f \n';
+  for (var i = 1; i <= 5; i++) xs += ('0000000000' + xref[i]).slice(-10) + ' 00000 n \n';
+  add(xs + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xo + '\n%%EOF');
+  return new Blob(parts, { type: 'application/pdf' });
+}
+// ---------- ZIP (من غير ضغط) ----------
+var CRC_T = null;
+function crc32(u) {
+  if (!CRC_T) { CRC_T = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } }
+  var crc = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) crc = CRC_T[(crc ^ u[i]) & 0xFF] ^ (crc >>> 8); return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function certZip(files) {   // files: [{ name, data: Uint8Array }]
+  var enc = new TextEncoder(), parts = [], cen = [], off = 0, now = new Date();
+  var dt = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF, dd = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+  var le = function (n, b) { var a = new Uint8Array(b); for (var i = 0; i < b; i++) a[i] = (n >>> (8 * i)) & 0xFF; return a; };
+  var cat = function (arr) { var n = 0; arr.forEach(function (a) { n += a.length; }); var o = new Uint8Array(n), p = 0; arr.forEach(function (a) { o.set(a, p); p += a.length; }); return o; };
+  files.forEach(function (f) {
+    var nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+    var lh = cat([le(0x04034b50, 4), le(20, 2), le(0x0800, 2), le(0, 2), le(dt, 2), le(dd, 2), le(crc, 4), le(sz, 4), le(sz, 4), le(nm.length, 2), le(0, 2), nm]);
+    cen.push(cat([le(0x02014b50, 4), le(20, 2), le(20, 2), le(0x0800, 2), le(0, 2), le(dt, 2), le(dd, 2), le(crc, 4), le(sz, 4), le(sz, 4), le(nm.length, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(off, 4), nm]));
+    parts.push(lh, f.data); off += lh.length + sz;
+  });
+  var cd = cat(cen);
+  parts.push(cd, cat([le(0x06054b50, 4), le(0, 2), le(0, 2), le(files.length, 2), le(files.length, 2), le(cd.length, 4), le(off, 4), le(0, 2)]));
+  return new Blob(parts, { type: 'application/zip' });
+}
+function saveBlob(blob, name) {
+  var a = document.createElement('a'), u = URL.createObjectURL(blob); a.href = u; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 4000);
+}
+function certFile(s, kind) { return (s.name + ' - ' + CERT_KINDS[kind].t).replace(/[\\/:*?"<>|]/g, '') + '.pdf'; }
+
+// ---------- الشاشات ----------
+function certHome() {
+  loading();
+  call('certClasses', [ME.code], function (list) {
+    var by = {}; list.forEach(function (c) { (by[c.program] = by[c.program] || []).push(c); });
+    var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد، شهادة الفاينال، والشهادة الختامية للترم. التقدير بالكلام بس (ممتاز / جيد جدا / جيد / مقبول) — من غير أرقام.</div></div>';
+    h += Object.keys(by).length ? Object.keys(by).map(function (p) {
+      return '<div class="panel"><h3>' + esc(p) + '</h3>' + by[p].map(function (c) {
+        return '<div class="cls ok" data-cc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.term) + (c.level ? ' • ' + esc(c.level) : '') + ' • ' + esc(c.branch) + '</div></div>'; }).join('') + '</div>'; }).join('')
+      : '<div class="panel"><div class="empty">مفيش مجموعات في نطاقك.</div></div>';
+    main(h);
+    $('main').onclick = function (e) { var b = e.target.closest('[data-cc]'); if (b) { Sound.play('tap'); certClass(b.dataset.cc); } };
+  });
+}
+function certClass(cls) {
+  loading();
+  call('certData', [ME.code, cls], function (d) {
+    var kind = ST.certKind || 'mid';
+    var draw = function () {
+      var ready = d.students.filter(function (s) { return certHas(s, kind); }).length;
+      var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📜 ' + esc(d.cls) + '</h3><div class="sub">' + esc(d.program) + ' • ' + esc(d.term) + (d.year ? ' • ' + esc(d.year) : '') + '</div>' +
+        '<div class="chips">' + Object.keys(CERT_KINDS).map(function (k) { return '<button type="button" class="chip' + (k === kind ? ' on' : '') + '" data-ck="' + k + '">' + CERT_KINDS[k].short + '</button>'; }).join('') + '</div>' +
+        '<div class="sub">المنهج من: ' + esc(kind === 'all' ? [d.sources.mid, d.sources.final].filter(String).join(' + ') || '—' : d.sources[kind] || '— (لسه مفيش تقييم ' + (kind === 'mid' ? 'منتصف' : 'نهائي') + ')') +
+          ' • القرآن من اختبار ' + (kind === 'mid' ? 'الميد' : kind === 'final' ? 'الفاينال' : 'الميد والفاينال') + '</div>' +
+        '<div class="sub">التقدير: ممتاز من ' + d.bands[0] + '% • جيد جدا من ' + d.bands[1] + '% • جيد من ' + d.bands[2] + '% • أقل = مقبول (بيتغيّر من «الإعدادات»)</div>' +
+        '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button></div>';
+      h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th><th></th></tr></thead><tbody>' +
+        d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
+          return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(g.quran || '—') + '</td><td>' + esc(g.content || '—') + '</td><td><b>' + esc(g.overall || '—') + '</b></td>' +
+            '<td style="white-space:nowrap">' + (okk ? '<button class="btn sm ghost" type="button" data-pv="' + i + '" style="width:auto">👁️</button> <button class="btn sm" type="button" data-dl="' + i + '" style="width:auto">⬇️ PDF</button>' : '<small>لسه</small>') + '</td></tr>'; }).join('') +
+        '</tbody></table></div></div><div id="cert-pv"></div>';
+      main(h);
+    };
+    draw();
+    $('main').onclick = function (e) { var b;
+      if (e.target.closest('[data-b]')) { certHome(); return; }
+      if ((b = e.target.closest('[data-ck]'))) { kind = ST.certKind = b.dataset.ck; draw(); return; }
+      if ((b = e.target.closest('[data-pv]'))) { var s = d.students[Number(b.dataset.pv)]; $('cert-pv').innerHTML = '<div class="panel loading">بتترسم…</div>';
+        certDraw(d, s, kind).then(function (cv) { $('cert-pv').innerHTML = '<div class="panel"><h3>👁️ ' + esc(s.name) + '</h3><img src="' + cv.toDataURL('image/jpeg', 0.85) + '" style="width:100%;border:1px solid var(--ln);border-radius:8px" alt="الشهادة"></div>'; $('cert-pv').scrollIntoView({ behavior: 'smooth' }); });
+        return; }
+      if ((b = e.target.closest('[data-dl]'))) { var st = d.students[Number(b.dataset.dl)]; busy(b, '…');
+        certDraw(d, st, kind).then(function (cv) { saveBlob(certPdf(cv), certFile(st, kind)); busy(b); Sound.play('ok'); }, function () { busy(b); toast('حصلت مشكلة في الرسم'); });
+        return; }
+      if ((b = e.target.closest('[data-zip]'))) {
+        var list = d.students.filter(function (s) { return certHas(s, kind); }), files = [], i = 0; busy(b, 'بيتجهز 0 / ' + list.length);
+        var next = function () {
+          if (i >= list.length) { saveBlob(certZip(files), (d.cls + ' - ' + CERT_KINDS[kind].t).replace(/[\\/:*?"<>|]/g, '') + '.zip'); busy(b); Sound.play('ok'); toast('اتحمّل ' + files.length + ' شهادة ✅'); return; }
+          var s = list[i++];
+          certDraw(d, s, kind).then(function (cv) { return certPdf(cv).arrayBuffer(); }).then(function (ab) { files.push({ name: certFile(s, kind), data: new Uint8Array(ab) }); busy(b, 'بيتجهز ' + i + ' / ' + list.length); setTimeout(next, 0); },
+            function () { busy(b); toast('حصلت مشكلة في الرسم'); });
+        };
+        next(); }
+    };
+  }, function (er) { failed(er); certHome(); });
+}
 </script>
 </body>
 </html>
