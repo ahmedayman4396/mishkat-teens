@@ -79,6 +79,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 4px
 .back{background:rgba(255,255,255,.95);border:none;color:var(--c);font-family:inherit;font-size:13.5px;cursor:pointer;padding:6px 12px;margin-bottom:8px;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .chk{display:flex;flex-wrap:wrap;gap:6px}.chk label{border:2px solid var(--ln);border-radius:20px;padding:5px 10px;font-size:13px;cursor:pointer}.chk input{display:none}
 .chk label.on{background:var(--c);color:#fff;border-color:var(--c)}
+input.bad{border-color:var(--bad)!important;background:#fdecea!important}
 .ur{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--ln);font-size:14px}.ur.off{opacity:.5}
 @media print{.top,.tabs,.back,button,input[type=month]{display:none!important}body{background:#fff}.panel{box-shadow:none;border:1px solid #ddd}}
 </style>
@@ -1068,11 +1069,11 @@ function asmtHome() {
     d.list.forEach(function (x) {
       h += '<div class="panel"><div class="row"><div><h3 style="margin:0">' + esc(x.name) + '</h3><div class="sub" style="margin:2px 0 0">' + esc(x.program) + ' • ' + esc(x.kind) +
         (x.week ? ' • أسبوع ' + esc(x.week) : '') + (x.date ? ' • ' + esc(x.date) : '') + ' • ' + (x.nQuran ? x.nContent + ' محتوى + ' + x.nQuran + ' قرآن' : x.domains + ' مجال') + '</div>' +
-        '<div class="sub" style="margin:2px 0 0">' + (x.due ? '⏰ التسليم: ' + esc(x.due) : 'من غير موعد تسليم') + (x.status === 'مقفول' ? ' • <span class="pill wait">مقفول</span>' : '') + '</div></div>' +
+        '<div class="sub" style="margin:2px 0 0">' + (x.session ? '⏰ التسليم: ' + esc(x.dueHours) + ' ساعة بعد الحلقة ' + esc(x.session) : (x.due ? '⏰ التسليم: ' + esc(x.due) : 'من غير موعد تسليم')) + (x.status === 'مقفول' ? ' • <span class="pill wait">مقفول</span>' : '') + '</div></div>' +
         (d.canSeeAll ? '<button class="btn sm sec" type="button" data-ar="' + esc(x.id) + '" style="flex:0 0 auto">📊 التقرير</button>' : '') + '</div>' +
         x.classes.map(function (c) {
           var st = c.submitted ? '<span class="pill ok">✅ اتسلّم</span>' : (c.late ? '<span class="pill" style="background:#fdecea;color:var(--bad)">⏳ متأخر</span>' : '<span class="pill wait">لسه</span>');
-          return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + c.done + ' / ' + c.students + ' طالب</small> ' + st + '</span><span style="white-space:nowrap">' +
+          return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + c.done + ' / ' + c.students + ' طالب' + (x.session && c.due ? ' • لحد ' + esc(c.due) : '') + '</small> ' + st + '</span><span style="white-space:nowrap">' +
             (c.mine || d.canCreate ? '<button class="btn ghost" type="button" data-ae="' + esc(x.id) + '" data-c="' + esc(c.name) + '">' + (x.status === 'مقفول' ? 'عرض' : 'الدرجات') + '</button>' : '') +
             (!d.canSeeAll ? '<button class="btn ghost" type="button" data-ar="' + esc(x.id) + '">النتيجة</button>' : '') + '</span></div>'; }).join('') +
         (d.canCreate ? '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-aedit="' + esc(x.id) + '">✏️ تعديل</button><button class="btn sm sec" type="button" data-ast="' + esc(x.id) + '" data-s="' + (x.status === 'مقفول' ? 'مفتوح' : 'مقفول') + '">' + (x.status === 'مقفول' ? '🔓 فتح' : '🔒 قفل') + '</button></div>' : '') + '</div>';
@@ -1092,44 +1093,54 @@ function asmtHome() {
 function asmtForm(a) {
   loading();
   call('asmtMeta', [ME.code], function (m) {
-    var QP = m.quranPreset || [], blank5 = function () { return ['', '', '', '', '']; };
-    var content = a ? a.domains.filter(function (d) { return d.g !== 'quran'; }).map(function (d) { var l = (d.labels || []).slice(0, 5); while (l.length < 5) l.push(''); return { k: d.k, name: d.name, desc: d.desc || '', w: d.w, labels: l }; })
-                    : [{ name: '', desc: '', w: '', labels: blank5() }];
-    if (!content.length) content.push({ name: '', desc: '', w: '', labels: blank5() });
+    var QP = m.quranPreset || [], TP = m.templates || [], SN = m.scaleNames || {};
+    var tplOf = function (k) { return TP.filter(function (t) { return t.key === k; })[0]; };
+    var nLv = function () { return Math.max(0, Number(x.max) - Number(x.min) + 1); };
+    var fit = function (arr, n) { arr = (arr || []).slice(0, n); while (arr.length < n) arr.push(''); return arr; };
+    var content = a ? a.domains.filter(function (d) { return d.g !== 'quran'; }).map(function (d) { return { k: d.k, name: d.name, desc: d.desc || '', w: d.w, rub: (d.rub || []).slice(), tpl: d.tpl || '' }; }) : [];
+    if (!content.length) content.push({ name: '', desc: '', w: '', rub: [], tpl: '' });
     var oldQ = a ? a.domains.filter(function (d) { return d.g === 'quran'; }) : [];
-    var x = { id: a ? a.id : '', name: a ? a.name : '', program: a ? a.program : ((m.programs[0] || {}).code || ''), kind: a ? a.kind : 'منتصف', week: a ? a.week : '', date: a ? a.date : '', due: a ? a.due : '',
-              levels: a ? a.levels.slice() : [], classes: a ? a.classes.slice() : [], status: a ? a.status : 'مفتوح', content: content,
-              quran: a ? oldQ.length > 0 : QP.length > 0, qk: {} };
+    var x = { id: a ? a.id : '', name: a ? a.name : '', program: a ? a.program : ((m.programs[0] || {}).code || ''), kind: a ? a.kind : 'منتصف', week: a ? a.week : '', date: a ? a.date : '',
+              due: a ? a.due : '', session: a && a.session ? a.session : '', dueHours: a && a.dueHours ? a.dueHours : 48, dueMode: a && !a.session && a.due ? 'date' : 'session',
+              min: a ? a.min : 1, max: a ? a.max : 4, labels: a ? (a.labels || []).slice() : (SN[4] || []).slice(),
+              levels: a ? a.levels.slice() : [], classes: a ? a.classes.slice() : [], status: a ? a.status : 'مفتوح', content: content, quran: oldQ.length > 0, qk: {} };
     oldQ.forEach(function (d) { x.qk[d.name] = d.k; });
     ST.af = x;
+    var applyTpl = function (d) { var t = tplOf(d.tpl), n = nLv(); if (t && (n === 4 || n === 5)) d.rub = (n === 4 ? t.l4 : t.l5).slice(); };
     var sumTxt = function () { var n = x.content.filter(function (d) { return d.name.trim(); }).length, qm = x.quran ? QP.reduce(function (t, q) { return t + q.max; }, 0) : 0;
-      return n + ' معيار محتوى' + (x.quran ? ' + ' + QP.length + ' قرآن' : '') + ' • المجموع من ' + (n * 5 + qm); };
+      return n + ' معيار' + (x.quran ? ' + ' + QP.length + ' قرآن' : '') + ' • المجموع من ' + (n * Number(x.max || 0) + qm) + (n ? ' (أقل مجموع ' + (n * Number(x.min || 0)) + ')' : ''); };
     var draw = function () {
-      var p = m.programs.filter(function (q) { return q.code === x.program; })[0] || m.programs[0] || { levels: [], classes: [] };
+      var p = m.programs.filter(function (q) { return q.code === x.program; })[0] || m.programs[0] || { levels: [], classes: [] }, n = nLv();
       var chk = function (list, sel, attr) { return '<div class="chk">' + list.map(function (v) { var on = sel.indexOf(v) !== -1; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" data-' + attr + '="' + esc(v) + '"' + (on ? ' checked' : '') + '>' + esc(v) + '</label>'; }).join('') + '</div>'; };
       var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>' + (x.id ? '✏️ تعديل التقييم' : '➕ تقييم جديد') + '</h3>' +
-        '<div class="f"><label class="lb">اسم التقييم:</label><input type="text" id="af-name" value="' + esc(x.name) + '" placeholder="مثلًا: تقييم منتصف الترم – Discover"></div>' +
+        '<div class="f"><label class="lb">اسم التقييم:</label><input type="text" id="af-name" value="' + esc(x.name) + '" placeholder="مثلًا: تقييم منتصف الترم – تينز – Discover (الحلقة 7)"></div>' +
         '<div class="row"><div class="f"><label class="lb">البرنامج:</label><select id="af-program"' + (x.id ? ' disabled' : '') + '>' + opts(m.programs.map(function (q) { return { v: q.code, l: q.name }; }), x.program) + '</select></div>' +
         '<div class="f"><label class="lb">النوع:</label><select id="af-kind">' + opts(m.kinds, x.kind) + '</select></div></div>' +
         '<div class="sub">الترم: ' + esc(p.term ? p.term.name : '—') + (p.term ? ' (إحنا في الأسبوع ' + p.term.now + ')' : '') + '</div>' +
-        '<div class="row"><div class="f"><label class="lb">الأسبوع:</label><input type="number" id="af-week" value="' + esc(x.week) + '" min="1"></div>' +
         '<div class="f"><label class="lb">التاريخ:</label><input type="date" id="af-date" value="' + esc(x.date) + '"></div>' +
-        '<div class="f"><label class="lb">موعد التسليم:</label><input type="date" id="af-due" value="' + esc(x.due) + '"></div></div>' +
         '<div class="f"><label class="lb">المستويات (لو مختارتش = كل المستويات):</label>' + chk(p.levels, x.levels, 'lv') + '</div>' +
         '<div class="f"><label class="lb">المجموعات (لو مختارتش = كل مجموعات المستويات دي):</label>' + (p.classes.length ? chk(p.classes.map(function (c) { return c.name; }), x.classes, 'cl') : '<div class="sub">مفيش مجموعات في البرنامج ده.</div>') + '</div></div>';
-      h += '<div class="panel"><h3>📖 القرآن</h3><div class="sub">ثابت من دليل قسم القرآن (تاب «المعايير») — مش بيتكتب هنا.</div>' +
-        (QP.length ? '<div class="chk" style="margin:6px 0"><label class="' + (x.quran ? 'on' : '') + '" id="af-quran-l"><input type="checkbox" id="af-quran"' + (x.quran ? ' checked' : '') + '>' + (x.quran ? '✅ القرآن داخل في التقييم ده' : 'ضيف القرآن للتقييم ده') + '</label></div>' +
-          (x.quran ? QP.map(function (q) { return '<details class="scl" style="margin:4px 0"><summary><span style="font-weight:bold;color:#444">' + esc(q.name) + '</span> — من ' + q.min + ' لـ ' + q.max + ' (اضغط تشوف الأوصاف)</summary>' + q.labels.map(function (t, j) { return '<div><b>' + (q.min + j) + '</b>' + esc(t) + '</div>'; }).join('') + '</details>'; }).join('') : '')
-          : '<div class="empty">مفيش معايير قرآن في تاب «المعايير».</div>') + '</div>';
-      h += '<div class="panel"><h3>💡 المحتوى</h3><div class="sub">كل معيار من 1 لـ 5 — اكتب معنى كل درجة للمعيار ده. الوزن اختياري (فاضي = كلهم متساويين).</div>' +
-        x.content.map(function (d, i) { var miss = d.name && d.labels.some(function (t) { return !t.trim(); });
+      h += '<div class="panel"><h3>⏰ التسليم</h3><div class="chips"><button type="button" class="chip' + (x.dueMode === 'session' ? ' on' : '') + '" data-dm="session">بعد الحلقة</button><button type="button" class="chip' + (x.dueMode === 'date' ? ' on' : '') + '" data-dm="date">تاريخ ثابت</button></div>' +
+        (x.dueMode === 'session' ? '<div class="row" style="margin-top:8px"><div class="f"><label class="lb">رقم الحلقة:</label><input type="number" id="af-session" min="1" value="' + esc(x.session) + '"></div><div class="f"><label class="lb">التسليم بعدها بـ (ساعة):</label><input type="number" id="af-hours" min="1" value="' + esc(x.dueHours) + '"></div></div>' +
+            '<div class="sub">الموعد بيتحسب لكل مجموعة على حسب يوم حلقتها (ولو الحلقة اتسجلت، بتاريخها الحقيقي).</div>'
+          : '<div class="f" style="margin-top:8px"><label class="lb">موعد التسليم:</label><input type="date" id="af-due" value="' + esc(x.due) + '"></div>') + '</div>';
+      h += '<div class="panel"><h3>🎚️ السلّم</h3><div class="row"><div class="f"><label class="lb">أقل درجة:</label><input type="number" id="af-min" value="' + esc(x.min) + '" min="0"></div>' +
+        '<div class="f"><label class="lb">أعلى درجة:</label><input type="number" id="af-max" value="' + esc(x.max) + '"></div></div>' +
+        '<div class="sub">اسم كل درجة — بيظهر للمربي جنب الرقم.' + (SN[n] ? ' <button class="btn ghost" type="button" data-sn="1">استخدم الأسماء الجاهزة</button>' : '') + '</div>' +
+        fit(x.labels, Math.min(n, 11)).map(function (t, i) { return '<div class="row" style="align-items:center;margin:4px 0"><b style="flex:0 0 34px;text-align:center">' + (Number(x.min) + i) + '</b><input type="text" data-lab="' + i + '" value="' + esc(t) + '" placeholder="اسم الدرجة"></div>'; }).join('') + '</div>';
+      h += '<div class="panel"><h3>💡 المعايير</h3><div class="sub">كل معيار منفصل في الإدخال والتقارير. اختار «📐 قالب» علشان يتملا معنى كل درجة بمنطق تعليمي، وعدّل الصياغة براحتك. الوزن اختياري.</div>' +
+        x.content.map(function (d, i) { var t = tplOf(d.tpl), rub = fit(d.rub, n), filled = rub.filter(function (z) { return z.trim(); }).length;
           return '<div style="border:1px solid var(--ln);border-radius:10px;padding:8px;margin:8px 0"><div class="row" style="align-items:center"><b style="flex:0 0 24px">' + (i + 1) + '</b>' +
-            '<input type="text" data-dn="' + i + '" value="' + esc(d.name) + '" placeholder="اسم المعيار" style="flex:3"><input type="number" data-dw="' + i + '" value="' + esc(d.w) + '" placeholder="الوزن" style="flex:1" min="0" step="any">' +
+            '<input type="text" data-dn="' + i + '" value="' + esc(d.name) + '" placeholder="اسم المعيار (زي: ربي: أعرف)" style="flex:3"><input type="number" data-dw="' + i + '" value="' + esc(d.w) + '" placeholder="الوزن" style="flex:1" min="0" step="any">' +
             '<button class="btn ghost" type="button" data-dx="' + i + '" style="flex:0 0 auto">✕</button></div>' +
-            '<input type="text" data-dd="' + i + '" value="' + esc(d.desc) + '" placeholder="وصف قصير (اختياري)" style="margin-top:6px">' +
-            [0, 1, 2, 3, 4].map(function (j) { return '<div class="row" style="align-items:center;margin:3px 0"><b style="flex:0 0 26px;text-align:center">' + (j + 1) + '</b><input type="text" data-dl="' + i + '|' + j + '" value="' + esc(d.labels[j]) + '" placeholder="معنى الدرجة ' + (j + 1) + '"></div>'; }).join('') +
-            (miss ? '<div class="sub" style="color:var(--warn);margin:2px 0 0">⚠️ فيه درجات من غير معنى — المربي هيشوف الرقم بس.</div>' : '') + '</div>'; }).join('') +
-        '<button class="btn sec" type="button" data-dadd="1">➕ معيار محتوى</button></div>';
+            '<input type="text" data-dd="' + i + '" value="' + esc(d.desc) + '" placeholder="وصف قصير (بيقيس إيه؟)" style="margin-top:6px">' +
+            '<div class="row" style="margin-top:6px;align-items:center"><select data-tp="' + i + '" style="flex:1">' + opts(TP.map(function (z) { return { v: z.key, l: '📐 ' + z.name }; }), d.tpl, '📐 قالب لمعاني الدرجات (اختياري)') + '</select></div>' +
+            (t ? '<div class="sub" style="margin:2px 0 0">الإطار: ' + esc(t.frame) + (n !== 4 && n !== 5 ? ' — <span style="color:var(--warn)">القوالب للسلّم 4 أو 5 بس</span>' : '') + '</div>' : '') +
+            '<details class="scl" style="margin:6px 0 0"' + (filled ? ' open' : '') + '><summary>معنى كل درجة في المعيار ده (' + filled + '/' + n + ')</summary>' +
+              rub.slice(0, 11).map(function (z, j) { return '<div class="row" style="align-items:center;margin:3px 0"><b style="flex:0 0 26px;text-align:center">' + (Number(x.min) + j) + '</b><textarea rows="2" data-rb="' + i + '|' + j + '" placeholder="' + esc((x.labels[j] || '') + ' — يعني إيه في المعيار ده؟') + '" style="min-height:44px;font-size:14px;padding:7px">' + esc(z) + '</textarea></div>'; }).join('') + '</details></div>'; }).join('') +
+        '<button class="btn sec" type="button" data-dadd="1">➕ معيار</button></div>';
+      h += '<div class="panel"><h3>📖 القرآن</h3><div class="sub">تقييم القرآن (حفظ وتجويد ومعاني) منفصل وبيتعمل في قسم القرآن. ضيفه هنا بس لو التقييم ده محتاجه.</div>' +
+        (QP.length ? '<div class="chk" style="margin:6px 0"><label class="' + (x.quran ? 'on' : '') + '" id="af-quran-l"><input type="checkbox" id="af-quran"' + (x.quran ? ' checked' : '') + '>' + (x.quran ? '✅ القرآن داخل في التقييم ده' : 'ضيف القرآن للتقييم ده') + '</label></div>' : '') + '</div>';
       h += '<div class="panel"><div class="sub" id="af-sum">' + sumTxt() + '</div><button class="btn" type="button" id="af-save">حفظ ✅</button></div>';
       main(h);
     };
@@ -1137,90 +1148,148 @@ function asmtForm(a) {
     var mm = $('main'), redraw = function () { var y = window.scrollY; draw(); window.scrollTo(0, y); };
     mm.oninput = function (e) {
       var t = e.target, ds = t.dataset;
-      if (t.id === 'af-name') x.name = t.value; else if (t.id === 'af-week') x.week = t.value;
-      else if (ds.dl != null) { var pq = ds.dl.split('|'); x.content[Number(pq[0])].labels[Number(pq[1])] = t.value; }
-      else if (ds.dn != null) { x.content[Number(ds.dn)].name = t.value; if ($('af-sum')) $('af-sum').textContent = sumTxt(); } else if (ds.dd != null) x.content[Number(ds.dd)].desc = t.value; else if (ds.dw != null) x.content[Number(ds.dw)].w = t.value;
+      if (t.id === 'af-name') x.name = t.value; else if (t.id === 'af-session') x.session = t.value; else if (t.id === 'af-hours') x.dueHours = t.value;
+      else if (ds.lab != null) x.labels[Number(ds.lab)] = t.value;
+      else if (ds.rb != null) { var pq = ds.rb.split('|'), dd = x.content[Number(pq[0])]; dd.rub = fit(dd.rub, nLv()); dd.rub[Number(pq[1])] = t.value; }
+      else if (ds.dn != null) { x.content[Number(ds.dn)].name = t.value; if ($('af-sum')) $('af-sum').textContent = sumTxt(); }
+      else if (ds.dd != null) x.content[Number(ds.dd)].desc = t.value; else if (ds.dw != null) x.content[Number(ds.dw)].w = t.value;
     };
     mm.onchange = function (e) {
       var t = e.target, ds = t.dataset;
       if (t.id === 'af-program') { x.program = t.value; x.levels = []; x.classes = []; redraw(); }
       else if (t.id === 'af-kind') x.kind = t.value; else if (t.id === 'af-date') x.date = t.value; else if (t.id === 'af-due') x.due = t.value;
+      else if (t.id === 'af-min' || t.id === 'af-max') { var oldN = nLv(); x[t.id.slice(3)] = t.value; var nn = nLv();
+        if (nn !== oldN) { x.labels = SN[nn] ? SN[nn].slice() : fit(x.labels, nn); x.content.forEach(function (d) { if (d.tpl) applyTpl(d); else d.rub = fit(d.rub, nn); }); }
+        redraw(); }
+      else if (ds.tp != null) { var dt = x.content[Number(ds.tp)]; dt.tpl = t.value; if (t.value) { if (nLv() === 4 || nLv() === 5) applyTpl(dt); else toast('القوالب للسلّم من 4 أو 5 درجات بس'); } redraw(); }
       else if (t.id === 'af-quran') { x.quran = t.checked; redraw(); }
       else if (ds.lv != null || ds.cl != null) { var arr = ds.lv != null ? x.levels : x.classes, v = ds.lv != null ? ds.lv : ds.cl, i = arr.indexOf(v); if (t.checked && i === -1) arr.push(v); if (!t.checked && i !== -1) arr.splice(i, 1); redraw(); }
     };
     mm.onclick = function (e) {
       var b;
       if (e.target.closest('[data-b]')) { asmtHome(); return; }
-      if (e.target.closest('[data-dadd]')) { x.content.push({ name: '', desc: '', w: '', labels: blank5() }); redraw(); return; }
-      if ((b = e.target.closest('[data-dx]'))) { x.content.splice(Number(b.dataset.dx), 1); if (!x.content.length) x.content.push({ name: '', desc: '', w: '', labels: blank5() }); redraw(); return; }
+      if ((b = e.target.closest('[data-dm]'))) { x.dueMode = b.dataset.dm; redraw(); return; }
+      if (e.target.closest('[data-sn]')) { x.labels = (SN[nLv()] || []).slice(); redraw(); return; }
+      if (e.target.closest('[data-dadd]')) { x.content.push({ name: '', desc: '', w: '', rub: [], tpl: '' }); redraw(); return; }
+      if ((b = e.target.closest('[data-dx]'))) { x.content.splice(Number(b.dataset.dx), 1); if (!x.content.length) x.content.push({ name: '', desc: '', w: '', rub: [], tpl: '' }); redraw(); return; }
       if (e.target.id === 'af-save') {
-        var doms = x.content.filter(function (d) { return d.name.trim(); }).map(function (d) { return { k: d.k, name: d.name, desc: d.desc, w: d.w, g: 'content', labels: d.labels }; });
+        var n = nLv(), doms = x.content.filter(function (d) { return d.name.trim(); }).map(function (d) { return { k: d.k, name: d.name, desc: d.desc, w: d.w, g: 'content', rub: fit(d.rub, n), tpl: d.tpl }; });
         if (x.quran) QP.forEach(function (q) { doms.push({ k: x.qk[q.name], name: q.name, g: 'quran' }); });
+        var dueP = x.dueMode === 'session' ? { session: x.session, dueHours: x.dueHours, due: '' } : { session: '', dueHours: '', due: x.due };
         var btn = e.target; busy(btn, 'جاري الحفظ… ⏳');
-        call('asmtSave', [ME.code, { id: x.id, name: x.name, program: x.program, kind: x.kind, week: x.week, date: x.date, due: x.due, levels: x.levels, classes: x.classes,
-          domains: doms, status: x.status }], function () { busy(btn); Sound.play('ok'); toast('اتحفظ ✅'); asmtHome(); }, function (er) { busy(btn); failed(er); });
+        call('asmtSave', [ME.code, Object.assign({ id: x.id, name: x.name, program: x.program, kind: x.kind, week: x.week, date: x.date, levels: x.levels, classes: x.classes,
+          min: x.min, max: x.max, labels: fit(x.labels, n), domains: doms, status: x.status }, dueP)], function () { busy(btn); Sound.play('ok'); toast('اتحفظ ✅'); asmtHome(); }, function (er) { busy(btn); failed(er); });
       }
     };
   });
 }
 // ---------- إدخال الدرجات ----------
+var AR_DIGITS = { '٠': 0, '١': 1, '٢': 2, '٣': 3, '٤': 4, '٥': 5, '٦': 6, '٧': 7, '٨': 8, '٩': 9 };
+function parseGrade(raw, S) {   // «3» أو «3+» (↑) — بيقبل الأرقام العربي
+  var t = String(raw || '').replace(/[٠-٩]/g, function (c) { return AR_DIGITS[c]; }).replace(/\s/g, '');
+  if (!t) return { empty: true };
+  var m = t.match(/^(\d+)([+↑])?$/); if (!m) return { bad: true };
+  var v = Number(m[1]); if (v < S.min || v > S.max) return { bad: true };
+  return { v: v, up: !!m[2] && v < S.max };
+}
 function asmtEntry(id, cls) {
   loading();
   call('asmtGet', [ME.code, id, cls], function (d) {
     var a = d.a, rows = {};
-    d.students.forEach(function (s) { var sv = d.saved[s.code]; rows[s.code] = { att: sv ? sv.att : 'حاضر', data: sv ? JSON.parse(JSON.stringify(sv.data)) : {}, pct: sv ? sv.pct : '', complete: sv ? sv.complete : 'لسه' }; });
-    ST.ae = { d: d, rows: rows, open: null, notes: {} };
+    d.students.forEach(function (s) { var sv = d.saved[s.code], dt = sv ? JSON.parse(JSON.stringify(sv.data)) : {}, note = dt._n || ''; delete dt._n;
+      rows[s.code] = { att: sv ? sv.att : 'حاضر', data: dt, note: note }; });
+    var mode = 'grid'; try { mode = localStorage.getItem('mk_ae_mode') || 'grid'; } catch (e0) {}
+    ST.ae = { d: d, rows: rows, open: null, notes: {}, mode: mode };
+    var doms = asmtOrdered(a);
+    var rubTxt = function (dm, v) { var S = dS(a, dm), r = (dm.rub || [])[v - S.min]; return (aLabel(S, v) || '') + (r ? ' — ' + r : ''); };
     var status = function (r) {
       if (r.att !== 'حاضر') return '<span class="pill wait">' + esc(r.att) + '</span>';
       var n = a.domains.filter(function (dm) { return r.data[dm.k] && r.data[dm.k].v != null; }).length;
-      return n === a.domains.length ? '<span class="pill ok">مكتمل</span>' : (n ? '<span class="pill wait">غير مكتمل ' + n + '/' + a.domains.length + '</span>' : '<span class="pill">لسه</span>');
+      return n === a.domains.length ? '<span class="pill ok">مكتمل</span>' : (n ? '<span class="pill wait">ناقص ' + (a.domains.length - n) + '</span>' : '<span class="pill">لسه</span>');
     };
-    var draw = function () {
-      var e = ST.ae, h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📝 ' + esc(a.name) + '</h3><div class="sub">' + esc(d.cls) + ' • السلّم ' + a.min + '–' + a.max +
-        (a.due ? ' • ⏰ التسليم ' + esc(a.due) : '') + '</div>' +
-        (d.submitted ? '<div class="sub">✅ اتسلّم (' + esc(d.submitted.by) + ' ' + esc(d.submitted.time) + ') — تقدر تعدّل لو محتاج.</div>' : (d.late ? '<div class="sub" style="color:var(--bad)">⏳ موعد التسليم فات</div>' : '')) +
-        (a.domains.some(function (dm) { return !hasOwn(dm); }) ? '<details class="scl"><summary>ⓘ معنى الدرجات (المعايير اللي ملهاش معنى خاص)</summary>' + (a.labels.map(function (t, i) { return '<div><b>' + (a.min + i) + '</b>' + esc(t || '—') + '</div>'; }).join('')) + '</details>' : '') +
-        '<div class="sub">«↑» = قريب من المستوى اللي بعده (علامة بس، مش بتدخل في الحساب). «غائب» و«لم يُقيَّم» مش بيتحسبوا صفر.</div></div>';
-      h += '<div class="panel">' + d.students.map(function (s) {
+    var gridHTML = function () {
+      var e = ST.ae, dis = d.canEdit ? '' : ' disabled';
+      return '<div class="panel"><div class="sub" style="margin:0 0 6px">اكتب الرقم من الكشف • <b>3+</b> = 3 وقريب من اللي بعده (↑) • Tab للخانة اللي بعدها</div><div class="tw"><table style="font-size:13px;table-layout:fixed"><thead><tr><th style="text-align:right;width:34%">الطالب</th>' +
+        doms.map(function (dm) { return '<th title="' + esc(dm.desc || '') + '" style="white-space:normal;font-size:11.5px;line-height:1.2">' + esc(dm.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        d.students.map(function (s) { var r = e.rows[s.code], off = r.att !== 'حاضر';
+          return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
+            '<select data-ga="' + esc(s.code) + '" style="width:auto;padding:3px;font-size:12px;margin-top:3px"' + dis + '>' + opts(['حاضر', 'غائب', 'لم يُقيَّم'], r.att) + '</select></td>' +
+            doms.map(function (dm) { var c = r.data[dm.k] || {}, val = c.v != null ? c.v + (c.up ? '+' : '') : '';
+              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="numeric" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
+            '<tr><td colspan="' + (doms.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
+        '</tbody></table></div>' +
+        '<details class="scl" style="margin-top:8px"><summary>ⓘ معنى الدرجات</summary>' + a.labels.map(function (t, i) { return '<div><b>' + (a.min + i) + '</b>' + esc(t || '—') + '</div>'; }).join('') +
+          doms.filter(function (dm) { return (dm.rub || []).some(String) || dm.g === 'quran'; }).map(function (dm) { var S = dS(a, dm); var vs = []; for (var v = S.min; v <= S.max; v++) vs.push(v);
+            return '<div style="margin-top:6px"><b style="width:auto;color:var(--c)">' + esc(dm.name) + '</b>' + vs.map(function (v) { return '<div><b>' + v + '</b>' + esc(rubTxt(dm, v)) + '</div>'; }).join('') + '</div>'; }).join('') + '</details></div>';
+    };
+    var cardsHTML = function () {
+      var e = ST.ae;
+      return '<div class="panel">' + d.students.map(function (s) {
         var r = e.rows[s.code], open = e.open === s.code;
         var x = '<div class="st-h" data-x="open" data-s="' + esc(s.code) + '" style="cursor:pointer"><b>' + (open ? '▾ ' : '▸ ') + esc(s.name) + '</b><span>' + status(r) + '</span></div>';
         if (open) {
           x += '<div class="chips">' + ['حاضر', 'غائب', 'لم يُقيَّم'].map(function (t) { return '<button type="button" class="chip' + (r.att === t ? ' on' + (t !== 'حاضر' ? ' absent' : '') : '') + '" data-x="att" data-s="' + esc(s.code) + '" data-v="' + t + '"' + (d.canEdit ? '' : ' disabled') + '>' + t + '</button>'; }).join('') + '</div>';
-          var lastG = '';
-          if (r.att === 'حاضر') asmtOrdered(a).forEach(function (dm) {
-            if (dm.g !== lastG) { lastG = dm.g; x += '<div class="grp">' + (dm.g === 'quran' ? '📖 القرآن' : '💡 المحتوى') + '</div>'; }
+          var lastG = '', hasQ = doms.some(function (z) { return z.g === 'quran'; });
+          if (r.att === 'حاضر') doms.forEach(function (dm) {
+            if (hasQ && dm.g !== lastG) { lastG = dm.g; x += '<div class="grp">' + (dm.g === 'quran' ? '📖 القرآن' : '💡 المحتوى') + '</div>'; }
             var cur = r.data[dm.k] || {}, S = dS(a, dm), vals = []; for (var v = S.min; v <= S.max; v++) vals.push(v);
             var nk = s.code + '|' + dm.k, showN = e.notes[nk] || cur.n;
             x += '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(dm.name) + (dm.desc ? '<br><small style="color:var(--m);font-weight:normal">' + esc(dm.desc) + '</small>' : '') + '</div><div class="lv">' +
               vals.map(function (v) { return '<button type="button" data-x="sc" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" data-qv="' + v + '" data-v="' + aCol(S, v) + '" class="' + (cur.v === v ? 'on' : '') + '"' + (d.canEdit ? '' : ' disabled') + '>' + v + '</button>'; }).join('') + '</div></div>' +
-              (cur.v != null ? '<div class="desc">' + esc(aLabel(S, cur.v) || '') + (cur.up ? ' ↑ قريب من «' + esc(aLabel(S, cur.v + 1) || (cur.v + 1)) + '»' : '') + '</div>' : '') +
-              (S.own ? '<details class="scl"><summary>ⓘ معنى الدرجات (' + S.min + '–' + S.max + ')</summary>' + S.labels.map(function (t, j) { return t ? '<div><b>' + (S.min + j) + '</b>' + esc(t) + '</div>' : ''; }).join('') + '</details>' : '') +
+              (cur.v != null ? '<div class="desc">' + esc(rubTxt(dm, cur.v)) + (cur.up ? ' ↑ قريب من «' + esc(aLabel(S, cur.v + 1) || (cur.v + 1)) + '»' : '') + '</div>' : '') +
               '<div class="row" style="gap:6px;margin-top:4px">' + (cur.v != null && cur.v < S.max ? '<button type="button" class="btn sm ' + (cur.up ? '' : 'sec') + '" data-x="up" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" style="flex:0 0 auto"' + (d.canEdit ? '' : ' disabled') + '>↑ قريب من اللي بعده</button>' : '') +
               (showN ? '' : '<button type="button" class="btn sm sec" data-x="note" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" style="flex:0 0 auto">📝 ملاحظة</button>') + '</div>' +
               (showN ? '<input type="text" data-n="' + esc(nk) + '" value="' + esc(cur.n || '') + '" placeholder="ملاحظة على ' + esc(dm.name) + ' (اختياري)" style="margin-top:6px"' + (d.canEdit ? '' : ' disabled') + '>' : '') + '</div>';
           });
+          x += '<div class="f" style="margin:8px 0 0"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="ملاحظة / دليل على الطالب (اختياري)"' + (d.canEdit ? '' : ' disabled') + '></div>';
         }
         return '<div class="st">' + x + '</div>';
       }).join('') + '</div>';
+    };
+    var draw = function () {
+      var e = ST.ae, h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📝 ' + esc(a.name) + '</h3><div class="sub">' + esc(d.cls) + ' • السلّم ' + a.min + '–' + a.max +
+        (d.due ? ' • ⏰ التسليم ' + esc(d.due) : '') + '</div>' +
+        (d.submitted ? '<div class="sub">✅ اتسلّم (' + esc(d.submitted.by) + ' ' + esc(d.submitted.time) + ') — تقدر تعدّل لو محتاج.</div>' : (d.late ? '<div class="sub" style="color:var(--bad)">⏳ موعد التسليم فات</div>' : '')) +
+        '<div class="sub">«↑» علامة بس ومش داخلة في الحساب. «غائب» و«لم يُقيَّم» مش بيتحسبوا صفر.</div>' +
+        '<div class="chips"><button type="button" class="chip' + (e.mode === 'grid' ? ' on' : '') + '" data-mode="grid">⚡ جدول سريع</button><button type="button" class="chip' + (e.mode !== 'grid' ? ' on' : '') + '" data-mode="cards">👤 طالب طالب</button></div></div>';
+      h += e.mode === 'grid' ? gridHTML() : cardsHTML();
       if (d.canEdit) h += '<div class="panel"><div class="row"><button class="btn sec" type="button" id="ae-save">💾 حفظ وكمّل بعدين</button><button class="btn" type="button" id="ae-submit">✅ تسليم</button></div></div>';
       var y = window.scrollY; main(h); window.scrollTo(0, y);
     };
     draw();
-    var mm = $('main'), payload = function () { return d.students.map(function (s) { var r = ST.ae.rows[s.code]; return { student: s.code, att: r.att, data: r.data }; }); };
-    mm.oninput = function (ev) { var t = ev.target; if (t.dataset.n) { var p = t.dataset.n.split('|'), r = ST.ae.rows[p[0]]; (r.data[p[1]] = r.data[p[1]] || {}).n = t.value; } };
+    var mm = $('main'), payload = function () { return d.students.map(function (s) { var r = ST.ae.rows[s.code]; return { student: s.code, att: r.att, data: r.data, note: r.note }; }); };
+    var domOf = function (k) { return a.domains.filter(function (z) { return z.k === k; })[0] || {}; };
+    mm.oninput = function (ev) { var t = ev.target, r;
+      if (t.dataset.n) { var p = t.dataset.n.split('|'); r = ST.ae.rows[p[0]]; (r.data[p[1]] = r.data[p[1]] || {}).n = t.value; }
+      else if (t.dataset.gn) ST.ae.rows[t.dataset.gn].note = t.value;
+      else if (t.dataset.gv) { var q = t.dataset.gv.split('|'), k = q[1], g = parseGrade(t.value, dS(a, domOf(k))); r = ST.ae.rows[q[0]];
+        t.classList.toggle('bad', !!g.bad);
+        if (g.bad) return;
+        var o = r.data[k] = r.data[k] || {};
+        if (g.empty) { delete o.v; delete o.up; } else { o.v = g.v; if (g.up) o.up = 1; else delete o.up; }
+        if (!Object.keys(o).length) delete r.data[k];
+        var gs = $('gs-' + q[0]); if (gs) gs.innerHTML = status(r); }
+    };
+    mm.onchange = function (ev) { var t = ev.target;
+      if (t.dataset.ga) { var r = ST.ae.rows[t.dataset.ga]; r.att = t.value; var row = t.closest('tr');
+        [].forEach.call(row.querySelectorAll('[data-gv]'), function (i) { i.disabled = r.att !== 'حاضر' || !d.canEdit; });
+        var gs = $('gs-' + t.dataset.ga); if (gs) gs.innerHTML = status(r); }
+    };
     mm.onclick = function (ev) {
-      var b = ev.target.closest('[data-x]'), e = ST.ae;
+      var b = ev.target.closest('[data-x]'), e = ST.ae, md;
       if (ev.target.closest('[data-b]')) { asmtHome(); return; }
+      if ((md = ev.target.closest('[data-mode]'))) { e.mode = md.dataset.mode; try { localStorage.setItem('mk_ae_mode', e.mode); } catch (e1) {} draw(); return; }
       if (b && !b.disabled) {
         var r = e.rows[b.dataset.s], k = b.dataset.k, act = b.dataset.x;
         if (act === 'open') e.open = e.open === b.dataset.s ? null : b.dataset.s;
         else if (act === 'att') r.att = b.dataset.v;
-        else if (act === 'sc') { var o = r.data[k] = r.data[k] || {}, v = Number(b.dataset.qv), dmx = dS(a, a.domains.filter(function (z) { return z.k === k; })[0] || {}).max; o.v = o.v === v ? null : v; if (o.v == null || o.v >= dmx) delete o.up; Sound.play('tap'); }
-        else if (act === 'up') { var q = r.data[k] = r.data[k] || {}; q.up = q.up ? 0 : 1; }
+        else if (act === 'sc') { var o = r.data[k] = r.data[k] || {}, v = Number(b.dataset.qv), dmx = dS(a, domOf(k)).max; o.v = o.v === v ? null : v; if (o.v == null || o.v >= dmx) delete o.up; Sound.play('tap'); }
+        else if (act === 'up') { var q2 = r.data[k] = r.data[k] || {}; q2.up = q2.up ? 0 : 1; }
         else if (act === 'note') e.notes[b.dataset.s + '|' + k] = true;
         draw(); return;
       }
       if (ev.target.id === 'ae-save' || ev.target.id === 'ae-submit') {
+        if (mm.querySelector('[data-gv].bad')) { Sound.play('err'); toast('فيه درجة غلط (باللون الأحمر) — صلّحها الأول'); return; }
         var sub = ev.target.id === 'ae-submit', btn = ev.target; busy(btn, '⏳');
         call('asmtScore', [ME.code, id, cls, payload(), sub], function () { busy(btn); Sound.play('ok'); toast(sub ? 'اتسلّم ✅' : 'اتحفظ ✅'); if (sub) asmtHome(); else asmtEntry(id, cls); }, function (er) { busy(btn); failed(er); });
       }
@@ -1246,13 +1315,13 @@ function asmtReportView(id) {
     var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📊 ' + esc(a.name) + '</h3><div class="sub">' + esc(a.programName) + ' • ' + esc(a.kind) + ' • السلّم ' + a.min + '–' + a.max +
       (a.due ? ' • التسليم ' + esc(a.due) : '') + '</div><div class="sub">للمتابعة الداخلية بس — مش بتظهر للأهل، ومفيش ترتيب للطلاب.</div></div>';
     h += '<div class="panel"><h3>📬 التسليم</h3>' + d.classes.map(function (c) {
-      return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + esc(c.coach) + ' • ' + c.done + ' / ' + c.roster + '</small></span><span>' +
+      return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + esc(c.coach) + ' • ' + c.done + ' / ' + c.roster + (c.due ? ' • لحد ' + esc(c.due) : '') + '</small></span><span>' +
         (c.submitted ? '<span class="pill ok">✅ ' + esc(c.submitted.time) + (c.submitted.late ? ' (متأخر)' : '') + '</span>' : (c.late ? '<span class="pill" style="background:#fdecea;color:var(--bad)">⏳ متأخر</span>' : '<span class="pill wait">لسه</span>')) + '</span></div>'; }).join('') + '</div>';
     if (d.program) h += '<div class="panel"><h3>🌐 البرنامج كله</h3>' + asmtStatsHTML(a, d.program) + '</div>';
     d.classes.forEach(function (c) {
       h += '<div class="panel"><h3>👥 ' + esc(c.name) + '</h3>' + asmtStatsHTML(a, c.stats) +
         '<details style="margin-top:8px"><summary style="cursor:pointer">الطلاب (' + c.students.length + ')</summary>' + c.students.map(function (s) {
-          return '<div class="line"><span class="k">' + esc(s.name) + '</span><small>' + esc(s.summary || 'لسه') + (s.att === 'حاضر' && s.pct !== '' ? ' • ' + s.pct + '%' + (s.pctQ !== '' && s.pctQ != null ? ' (قرآن ' + s.pctQ + '% • محتوى ' + gPct(s.pctC) + ')' : '') : '') + (s.complete === 'غير مكتمل' ? ' • <span class="pill wait">غير مكتمل</span>' : '') + '</small></div>'; }).join('') + '</details>' +
+          return '<div class="line"><span class="k">' + esc(s.name) + '</span><small>' + esc(s.summary || 'لسه') + (s.att === 'حاضر' && s.pct !== '' ? ' • ' + s.pct + '%' + (s.pctQ !== '' && s.pctQ != null ? ' (قرآن ' + s.pctQ + '% • محتوى ' + gPct(s.pctC) + ')' : '') : '') + (s.complete === 'غير مكتمل' ? ' • <span class="pill wait">غير مكتمل</span>' : '') + (s.note ? '<br>📝 ' + esc(s.note) : '') + '</small></div>'; }).join('') + '</details>' +
         (others.length ? '<div class="row" style="margin-top:8px"><select data-cmp="' + esc(c.name) + '"><option value="">📈 قارن بتقييم تاني…</option>' + others.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.name) + ' (' + esc(o.kind) + ')</option>'; }).join('') + '</select></div>' : '') + '</div>';
     });
     main(h);
