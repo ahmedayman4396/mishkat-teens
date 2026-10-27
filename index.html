@@ -1548,6 +1548,7 @@ $('tabs').addEventListener('click', function (e) { var b = e.target.closest('but
 //        v5.13: 📜 الشهادات — ميد / فاينال / الترم كله (PDF لكل طالب)
 //   بترسم الشهادة على canvas (العربي بيتشبك صح) وبتعمل PDF و ZIP من غير مكتبات برّه
 // ======================================================================
+var CERT_KIND_AR = { mid: 'الميد', final: 'الفاينال', all: 'الترم كله' };
 var CERT_KINDS = { mid: { t: 'شهادة منتصف الترم', short: 'الميد' }, final: { t: 'شهادة نهاية الترم', short: 'الفاينال' }, all: { t: 'الشهادة الختامية للترم', short: 'الترم كله' } };
 var CERT_THEME = {
   // كلمة «Meshkat Teens» تحت اللوجو: Meshkat بالأزرق و Teens بالأخضر (بدل الأسود) — بيتقسموا عند x=268 في اللوجو
@@ -1585,13 +1586,30 @@ function certLogo(th) {
 }
 // شكل الكلام على حسب نوع المجموعة (بنات / بنين / مش معروف)
 function certWords(g) {
-  return g === true ? { st: 'الطالبة', done: 'قد أتمّت' } : g === false ? { st: 'الطالب', done: 'قد أتمّ' } : { st: 'الطالب/ة', done: 'قد أتمّ/ت' };
+  return g === true ? { st: 'الطالبة', done: 'قد أتمّت', coach: 'مربية' } : g === false ? { st: 'الطالب', done: 'قد أتمّ', coach: 'مربي' } : { st: 'الطالب/ة', done: 'قد أتمّ/ت', coach: 'مربي/ة' };
+}
+var CERT_DEF_TPL = { titles: { mid: 'شهادة منتصف الترم', final: 'شهادة نهاية الترم', all: 'الشهادة الختامية للترم' }, intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
+  yearLine: 'العام الدراسي {العام}', boxes: [{ key: 'quran', label: 'القرآن الكريم', show: true }, { key: 'content', label: 'المنهج', show: true }, { key: 'overall', label: 'التقدير العام', show: true }],
+  extra: [], note: '', sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
+var CERT_PH = ['{الاسم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التاريخ}'];
+function certFill(str, d, s, kind) {
+  var w = certWords(d.girls), what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
+  var m = { '{الاسم}': s.name, '{الطالب}': w.st, '{أتم}': w.done, '{الفترة}': what, '{الترم}': d.term, '{البرنامج}': d.program, '{القسم}': d.sectionName || '', '{العام}': d.year || '',
+            '{المجموعة}': d.cls, '{المربي}': d.coach || '', '{مربي}': w.coach, '{التاريخ}': new Date().toLocaleDateString('ar-EG-u-nu-latn') };
+  return String(str || '').replace(/\{[^{}]+\}/g, function (k) { return m.hasOwnProperty(k) ? m[k] : k; }).replace(/\s+/g, ' ').trim();
+}
+// الخانات اللي هتظهر في الشهادة دي: التقديرات + الخانات الزيادة
+function certBoxes(d, s, kind) {
+  var t = d.tpl || CERT_DEF_TPL, g = s[kind] || {}, v = ((d.vals || {})[s.code] || {})[kind] || {}, out = [];
+  t.boxes.forEach(function (b) { if (b.show) out.push({ label: b.label, value: g[b.key] || '', main: b.key === 'overall' }); });
+  (t.extra || []).forEach(function (x) { if (x.kinds.indexOf(kind) !== -1) out.push({ label: x.label, value: x.type === 'text' ? x.text : (v[x.key] || ''), extra: true }); });
+  return out.filter(function (b) { return !b.main; }).concat(out.filter(function (b) { return b.main; }));   // التقدير العام دايمًا في الآخر
 }
 function certHas(s, kind) { var x = s[kind]; return !!(x && (x.quran || x.content || x.overall)); }
 
 function certDraw(d, s, kind) {
   var W = 1754, H = 1240, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  var th = CERT_THEME[d.section] || CERT_THEME.teens, x = cv.getContext('2d'), w = certWords(d.girls), g = s[kind] || {};
+  var th = CERT_THEME[d.section] || CERT_THEME.teens, x = cv.getContext('2d'), t = d.tpl || CERT_DEF_TPL, F = function (str) { return certFill(str, d, s, kind); };
   return Promise.all([certFont(), certLogo(th)]).then(function (r) {
     var logo = r[1];
     x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
@@ -1600,42 +1618,39 @@ function certDraw(d, s, kind) {
     th.c.forEach(function (col, i) { x.fillStyle = col; x.fillRect(60 + i * bw, 40, bw, 18); x.fillRect(60 + (th.c.length - 1 - i) * bw, H - 58, bw, 18); });
     x.strokeStyle = th.c[0]; x.lineWidth = 4; x.strokeRect(60, 78, W - 120, H - 156);
     x.strokeStyle = th.c[1]; x.lineWidth = 2; x.strokeRect(76, 94, W - 152, H - 188);
-    // دواير في الأركان
     [[60, 78], [W - 60, 78], [60, H - 78], [W - 60, H - 78]].forEach(function (p, i) {
       x.beginPath(); x.fillStyle = th.c[(i + 2) % th.c.length]; x.arc(p[0], p[1], 26, 0, Math.PI * 2); x.fill();
       x.beginPath(); x.fillStyle = th.c[i % th.c.length]; x.arc(p[0], p[1], 13, 0, Math.PI * 2); x.fill();
     });
     if (logo) { var lh = d.section === 'dar' ? 130 : 200, lw = lh * th.ar; x.drawImage(logo, (W - lw) / 2, 120, lw, lh); }
     x.direction = 'rtl'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
-    var T = function (txt, y, size, weight, color) { x.font = (weight || 400) + ' ' + size + 'px ' + CERT_FONT; x.fillStyle = color || th.ink; x.fillText(txt, W / 2, y); };
-    var top = d.section === 'dar' ? 330 : 400;
-    T(CERT_KINDS[kind].t, top, 84, 900, th.title);
-    T('تشهد ' + (d.sectionName || '') + ' بأن ' + w.st, top + 90, 38, 400);
-    // الاسم
-    var name = s.name, size = 96; x.font = '900 ' + size + 'px ' + CERT_FONT;
-    while (x.measureText(name).width > W - 360 && size > 50) { size -= 4; x.font = '900 ' + size + 'px ' + CERT_FONT; }
-    T(name, top + 210, size, 900, th.ink);
+    var fit = function (txt, size, weight, maxW) { x.font = weight + ' ' + size + 'px ' + CERT_FONT; while (x.measureText(txt).width > maxW && size > 18) { size -= 2; x.font = weight + ' ' + size + 'px ' + CERT_FONT; } return size; };
+    var T = function (txt, y, size, weight, color) { if (!txt) return; fit(txt, size, weight || 400, W - 300); x.fillStyle = color || th.ink; x.fillText(txt, W / 2, y); };
+    var top = d.section === 'dar' ? 330 : 400, note = F(t.note);
+    T(F(t.titles[kind]), top, 84, 900, th.title);
+    T(F(t.intro), top + 90, 38, 400);
+    T(s.name, top + 210, 96, 900, th.ink);
     x.strokeStyle = th.c[3] || th.c[2]; x.lineWidth = 6; x.beginPath(); x.moveTo(W / 2 - 380, top + 240); x.lineTo(W / 2 + 380, top + 240); x.stroke();
-    var what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
-    T(w.done + ' ' + what + ' — ' + d.program, top + 310, 36, 400);
-    if (d.year) T('العام الدراسي ' + d.year, top + 362, 32, 400, '#555');
-    // التقديرات
-    var boxes = [['القرآن الكريم', g.quran], ['المنهج', g.content], ['التقدير العام', g.overall]];
-    var bwid = 400, gap = 50, bx0 = (W - (bwid * 3 + gap * 2)) / 2, by = top + 420, bh = 170;
+    T(F(t.line), top + 310, 36, 400);
+    if (d.year || !/\{العام\}/.test(t.yearLine)) T(F(t.yearLine), top + 362, 32, 400, '#555');
+    // الخانات
+    var boxes = certBoxes(d, s, kind), n = boxes.length || 1, gap = n > 4 ? 26 : 50, bwid = Math.min(400, (W - 300 - gap * (n - 1)) / n);
+    var bx0 = (W - (bwid * n + gap * (n - 1))) / 2, by = top + (note ? 400 : 420), bh = note ? 145 : 170, cols = [th.c[0], th.c[2], th.c[1], th.c[3]], ci = 0;
     boxes.forEach(function (b, i) {
-      var bxp = W - bx0 - (i + 1) * bwid - i * gap, main = i === 2, col = th.c[i === 0 ? 0 : i === 1 ? 2 : 3];
-      x.fillStyle = main ? col : '#ffffff'; x.strokeStyle = col; x.lineWidth = 5;
+      var bxp = W - bx0 - (i + 1) * bwid - i * gap, col = b.main ? th.c[3] : cols[ci++ % cols.length];
+      x.fillStyle = b.main ? col : '#ffffff'; x.strokeStyle = col; x.lineWidth = 5;
       var rr = 26; x.beginPath(); x.moveTo(bxp + rr, by); x.arcTo(bxp + bwid, by, bxp + bwid, by + bh, rr); x.arcTo(bxp + bwid, by + bh, bxp, by + bh, rr); x.arcTo(bxp, by + bh, bxp, by, rr); x.arcTo(bxp, by, bxp + bwid, by, rr); x.closePath(); x.fill(); x.stroke();
-      x.textAlign = 'center'; x.font = '700 34px ' + CERT_FONT; x.fillStyle = main ? th.ink : '#555'; x.fillText(b[0], bxp + bwid / 2, by + 58);
-      x.font = '900 56px ' + CERT_FONT; x.fillStyle = th.ink; x.fillText(b[1] || '—', bxp + bwid / 2, by + 132);
+      x.textAlign = 'center'; fit(b.label, 34, 700, bwid - 30); x.fillStyle = b.main ? th.ink : '#555'; x.fillText(b.label, bxp + bwid / 2, by + (note ? 50 : 58));
+      fit(b.value || '—', 56, 900, bwid - 30); x.fillStyle = th.ink; x.fillText(b.value || '—', bxp + bwid / 2, by + (note ? 115 : 132));
     });
+    if (note) { x.textAlign = 'center'; fit(note, 32, 700, W - 300); x.fillStyle = th.title; x.fillText(note, W / 2, by + bh + 52); }
     // التوقيعات
-    var sy = H - 190; x.font = '400 30px ' + CERT_FONT; x.fillStyle = '#444';
+    var sy = H - 190;
     var sig = function (cx, label, who) { x.textAlign = 'center'; x.strokeStyle = '#999'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 190, sy); x.lineTo(cx + 190, sy); x.stroke();
-      x.font = '700 30px ' + CERT_FONT; x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); if (who) { x.font = '400 28px ' + CERT_FONT; x.fillText(who, cx, sy - 16); } };
-    sig(W - 420, d.girls === true ? 'مربية المجموعة' : d.girls === false ? 'مربي المجموعة' : 'مربي/ة المجموعة', d.coach);
-    sig(420, 'مسؤول البرنامج', '');
-    x.textAlign = 'center'; x.font = '400 26px ' + CERT_FONT; x.fillStyle = '#777'; x.fillText(new Date().toLocaleDateString('ar-EG-u-nu-latn'), W / 2, sy + 44);
+      if (label) { fit(label, 30, 700, 380); x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); } if (who) { fit(who, 28, 400, 380); x.fillStyle = '#444'; x.fillText(who, cx, sy - 16); } };
+    sig(W - 420, F(t.sig1.label), F(t.sig1.name));
+    sig(420, F(t.sig2.label), F(t.sig2.name));
+    var ft = F(t.footer); if (ft) { x.textAlign = 'center'; fit(ft, 26, 400, 520); x.fillStyle = '#777'; x.fillText(ft, W / 2, sy + 44); }
     return cv;
   });
 }
@@ -1690,38 +1705,101 @@ function certHome() {
   loading();
   call('certClasses', [ME.code], function (list) {
     var by = {}; list.forEach(function (c) { (by[c.program] = by[c.program] || []).push(c); });
-    var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد، شهادة الفاينال، والشهادة الختامية للترم. التقدير بالكلام بس (ممتاز / جيد جدا / جيد / مقبول) — من غير أرقام.</div></div>';
+    var admin = (ME.roles || []).indexOf('أدمن') !== -1;
+    var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد، شهادة الفاينال، والشهادة الختامية للترم. التقدير بالكلام بس (ممتاز / جيد جدا / جيد / مقبول) — من غير أرقام.</div>' +
+      (admin ? '<div class="row" style="margin-top:8px"><button class="btn sec" type="button" data-tp="teens">✏️ تصميم شهادة Teens</button><button class="btn sec" type="button" data-tp="dar">✏️ تصميم شهادة الدار</button></div>' : '') + '</div>';
     h += Object.keys(by).length ? Object.keys(by).map(function (p) {
       return '<div class="panel"><h3>' + esc(p) + '</h3>' + by[p].map(function (c) {
         return '<div class="cls ok" data-cc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.term) + (c.level ? ' • ' + esc(c.level) : '') + ' • ' + esc(c.branch) + '</div></div>'; }).join('') + '</div>'; }).join('')
       : '<div class="panel"><div class="empty">مفيش مجموعات في نطاقك.</div></div>';
     main(h);
-    $('main').onclick = function (e) { var b = e.target.closest('[data-cc]'); if (b) { Sound.play('tap'); certClass(b.dataset.cc); } };
+    $('main').onclick = function (e) { var b;
+      if ((b = e.target.closest('[data-tp]'))) { Sound.play('tap'); certTplEdit(b.dataset.tp); return; }
+      if ((b = e.target.closest('[data-cc]'))) { Sound.play('tap'); certClass(b.dataset.cc); } };
   });
+}
+// ✏️ تصميم الشهادة (الأدمن): كل الكلام والخانات والتوقيعات
+function certTplEdit(section) {
+  loading();
+  call('certTpl', [ME.code, section], function (r) {
+    var t = JSON.parse(JSON.stringify(r.tpl)), kind = 'mid', timer = null;
+    var sample = { cls: section === 'dar' ? 'مجموعة الدار' : 'T1_السبت_بنات03', section: section, sectionName: section === 'dar' ? 'دار مشكاة' : 'مشكاة Teens', program: section === 'dar' ? 'دار مشكاة – البرنامج الأساسي' : 'Teens – البرنامج الأساسي',
+      term: 'الترم الأول', year: '2026/2027', coach: 'Sohaila Osama', girls: true, tpl: t, vals: { S1: { mid: {}, final: {}, all: {} } } };
+    var stu = { code: 'S1', name: 'سارة محمد أحمد', mid: { quran: 'جيد جدا', content: 'ممتاز', overall: 'ممتاز' }, final: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' }, all: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' } };
+    var inp = function (id, val, ph) { return '<input type="text" data-tf="' + id + '" value="' + esc(val) + '" placeholder="' + esc(ph || '') + '">'; };
+    var draw = function () {
+      var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>✏️ تصميم شهادة ' + (section === 'dar' ? 'دار مشكاة' : 'Teens') + '</h3>' +
+        '<div class="sub">الكلمات اللي بين { } بتتبدّل لوحدها: ' + CERT_PH.map(esc).join(' ') + '</div></div>';
+      h += '<div class="panel"><h3>العناوين</h3>' + ['mid', 'final', 'all'].map(function (k) { return '<div class="f"><label class="lb">شهادة ' + CERT_KIND_AR[k] + ':</label>' + inp('titles.' + k, t.titles[k]) + '</div>'; }).join('') +
+        '<div class="f"><label class="lb">السطر اللي قبل الاسم:</label>' + inp('intro', t.intro) + '</div><div class="f"><label class="lb">السطر اللي بعد الاسم:</label>' + inp('line', t.line) + '</div>' +
+        '<div class="f"><label class="lb">سطر العام الدراسي (فاضي = مش هيظهر):</label>' + inp('yearLine', t.yearLine) + '</div></div>';
+      h += '<div class="panel"><h3>خانات التقدير</h3>' + t.boxes.map(function (b, i) { return '<div class="row" style="align-items:center;margin:4px 0"><label style="flex:0 0 auto"><input type="checkbox" data-bs="' + i + '"' + (b.show ? ' checked' : '') + '> يظهر</label>' + inp('boxes.' + i + '.label', b.label) + '</div>'; }).join('') + '</div>';
+      h += '<div class="panel"><h3>➕ خانات زيادة</h3><div class="sub">«لكل طالب» = بتكتبها لكل طالب من شاشة المجموعة (زي السلوك). «نص ثابت» = نفس الكلام لكل الطلاب. لحد 4 خانات.</div>' +
+        t.extra.map(function (e, i) { return '<div style="border:1px solid var(--ln);border-radius:10px;padding:8px;margin:6px 0"><div class="row" style="align-items:center">' + inp('extra.' + i + '.label', e.label, 'اسم الخانة (زي: السلوك)') +
+          '<select data-xt="' + i + '" style="flex:0 0 auto;width:auto">' + opts([{ v: 'student', l: 'لكل طالب' }, { v: 'text', l: 'نص ثابت' }], e.type) + '</select><button class="btn ghost" type="button" data-xd="' + i + '" style="flex:0 0 auto;width:auto">✕</button></div>' +
+          (e.type === 'text' ? '<div class="f" style="margin-top:6px">' + inp('extra.' + i + '.text', e.text, 'الكلام اللي هيتكتب') + '</div>' : '') +
+          '<div class="chk" style="margin-top:6px">' + ['mid', 'final', 'all'].map(function (k) { return '<label class="' + (e.kinds.indexOf(k) !== -1 ? 'on' : '') + '"><input type="checkbox" data-xk="' + i + '|' + k + '"' + (e.kinds.indexOf(k) !== -1 ? ' checked' : '') + '>' + CERT_KIND_AR[k] + '</label>'; }).join('') + '</div></div>'; }).join('') +
+        (t.extra.length < 4 ? '<button class="btn sec" type="button" data-xa="1">➕ خانة</button>' : '') + '</div>';
+      h += '<div class="panel"><h3>تحت الخانات</h3><div class="f"><label class="lb">سطر إضافي (اختياري):</label>' + inp('note', t.note, 'مثلًا: مع تمنياتنا لـ {الاسم} بالتوفيق') + '</div>' +
+        '<div class="row"><div class="f"><label class="lb">التوقيع اليمين — الوظيفة:</label>' + inp('sig1.label', t.sig1.label) + '</div><div class="f"><label class="lb">الاسم:</label>' + inp('sig1.name', t.sig1.name) + '</div></div>' +
+        '<div class="row"><div class="f"><label class="lb">التوقيع الشمال — الوظيفة:</label>' + inp('sig2.label', t.sig2.label) + '</div><div class="f"><label class="lb">الاسم:</label>' + inp('sig2.name', t.sig2.name) + '</div></div>' +
+        '<div class="f"><label class="lb">السطر اللي في النص تحت:</label>' + inp('footer', t.footer) + '</div></div>';
+      h += '<div class="panel"><div class="chips">' + ['mid', 'final', 'all'].map(function (k) { return '<button type="button" class="chip' + (k === kind ? ' on' : '') + '" data-pk="' + k + '">' + CERT_KIND_AR[k] + '</button>'; }).join('') + '</div>' +
+        '<div id="tp-pv" class="sub">بتترسم…</div><div class="row" style="margin-top:8px"><button class="btn" type="button" id="tp-save">حفظ ✅</button><button class="btn ghost" type="button" id="tp-reset">↩️ رجوع للأصلي</button></div></div>';
+      main(h); preview();
+    };
+    var preview = function () { clearTimeout(timer); timer = setTimeout(function () {
+      certDraw(sample, stu, kind).then(function (cv) { if ($('tp-pv')) $('tp-pv').innerHTML = '<img src="' + cv.toDataURL('image/jpeg', 0.8) + '" style="width:100%;border:1px solid var(--ln);border-radius:8px" alt="معاينة">'; }); }, 250); };
+    var setPath = function (path, v) { var p = path.split('.'), o = t; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v; };
+    draw();
+    var mm = $('main');
+    mm.oninput = function (e) { var el = e.target; if (el.dataset.tf) { setPath(el.dataset.tf, el.value); preview(); } };
+    mm.onchange = function (e) { var el = e.target, q;
+      if (el.dataset.bs != null) { t.boxes[Number(el.dataset.bs)].show = el.checked; preview(); }
+      else if (el.dataset.xt != null) { t.extra[Number(el.dataset.xt)].type = el.value; draw(); }
+      else if (el.dataset.xk) { q = el.dataset.xk.split('|'); var ks = t.extra[Number(q[0])].kinds, at = ks.indexOf(q[1]); if (el.checked && at === -1) ks.push(q[1]); if (!el.checked && at !== -1) ks.splice(at, 1); el.parentNode.classList.toggle('on', el.checked); preview(); } };
+    mm.onclick = function (e) { var b;
+      if (e.target.closest('[data-b]')) { certHome(); return; }
+      if (e.target.closest('[data-xa]')) { t.extra.push({ label: '', type: 'student', text: '', kinds: ['mid', 'final', 'all'] }); draw(); return; }
+      if ((b = e.target.closest('[data-xd]'))) { t.extra.splice(Number(b.dataset.xd), 1); draw(); return; }
+      if ((b = e.target.closest('[data-pk]'))) { kind = b.dataset.pk; [].forEach.call(mm.querySelectorAll('[data-pk]'), function (c) { c.classList.toggle('on', c === b); }); preview(); return; }
+      if (e.target.id === 'tp-save' || e.target.id === 'tp-reset') { var btn = e.target, reset = btn.id === 'tp-reset'; busy(btn, '…');
+        call('certTplSave', [ME.code, section, reset ? null : t], function (res) { busy(btn); Sound.play('ok'); toast(reset ? 'رجعت للأصلي ✅' : 'اتحفظ ✅'); t = res.tpl; sample.tpl = t; draw(); }, function (er) { busy(btn); failed(er); }); }
+    };
+  }, function (er) { failed(er); certHome(); });
 }
 function certClass(cls) {
   loading();
   call('certData', [ME.code, cls], function (d) {
     var kind = ST.certKind || 'mid';
+    var fields = function () { return (d.tpl.extra || []).filter(function (x) { return x.type === 'student' && x.kinds.indexOf(kind) !== -1; }); };
+    var val = function (s, k) { return (((d.vals || {})[s.code] || {})[kind] || {})[k] || ''; };
     var draw = function () {
-      var ready = d.students.filter(function (s) { return certHas(s, kind); }).length;
+      var ready = d.students.filter(function (s) { return certHas(s, kind); }).length, fs = fields();
       var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📜 ' + esc(d.cls) + '</h3><div class="sub">' + esc(d.program) + ' • ' + esc(d.term) + (d.year ? ' • ' + esc(d.year) : '') + '</div>' +
         '<div class="chips">' + Object.keys(CERT_KINDS).map(function (k) { return '<button type="button" class="chip' + (k === kind ? ' on' : '') + '" data-ck="' + k + '">' + CERT_KINDS[k].short + '</button>'; }).join('') + '</div>' +
         '<div class="sub">المنهج من: ' + esc(kind === 'all' ? [d.sources.mid, d.sources.final].filter(String).join(' + ') || '—' : d.sources[kind] || '— (لسه مفيش تقييم ' + (kind === 'mid' ? 'منتصف' : 'نهائي') + ')') +
           ' • القرآن من اختبار ' + (kind === 'mid' ? 'الميد' : kind === 'final' ? 'الفاينال' : 'الميد والفاينال') + '</div>' +
         '<div class="sub">التقدير: ممتاز من ' + d.bands[0] + '% • جيد جدا من ' + d.bands[1] + '% • جيد من ' + d.bands[2] + '% • أقل = مقبول (بيتغيّر من «الإعدادات»)</div>' +
         '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button></div>';
-      h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th><th></th></tr></thead><tbody>' +
+      h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th>' + fs.map(function (f) { return '<th>' + esc(f.label) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
         d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
           return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(g.quran || '—') + '</td><td>' + esc(g.content || '—') + '</td><td><b>' + esc(g.overall || '—') + '</b></td>' +
+            fs.map(function (f) { return '<td><input type="text" data-xv="' + esc(s.code) + '|' + esc(f.key) + '" value="' + esc(val(s, f.key)) + '" list="cert-gr" style="min-width:90px;padding:6px"></td>'; }).join('') +
             '<td style="white-space:nowrap">' + (okk ? '<button class="btn sm ghost" type="button" data-pv="' + i + '" style="width:auto">👁️</button> <button class="btn sm" type="button" data-dl="' + i + '" style="width:auto">⬇️ PDF</button>' : '<small>لسه</small>') + '</td></tr>'; }).join('') +
-        '</tbody></table></div></div><div id="cert-pv"></div>';
+        '</tbody></table></div>' + (fs.length ? '<datalist id="cert-gr"><option value="ممتاز"><option value="جيد جدا"><option value="جيد"><option value="مقبول"></datalist><button class="btn sec" type="button" id="xv-save" style="margin-top:8px">💾 حفظ الخانات (' + fs.map(function (f) { return f.label; }).join('، ') + ')</button>' : '') +
+        '</div><div id="cert-pv"></div>';
       main(h);
     };
     draw();
-    $('main').onclick = function (e) { var b;
+    var mm = $('main'), dirty = {};
+    mm.oninput = function (e) { var el = e.target; if (el.dataset.xv) dirty[el.dataset.xv] = el.value; };
+    mm.onclick = function (e) { var b;
       if (e.target.closest('[data-b]')) { certHome(); return; }
-      if ((b = e.target.closest('[data-ck]'))) { kind = ST.certKind = b.dataset.ck; draw(); return; }
+      if ((b = e.target.closest('[data-ck]'))) { kind = ST.certKind = b.dataset.ck; dirty = {}; draw(); return; }
+      if (e.target.id === 'xv-save') { var btn = e.target, rows = Object.keys(dirty).map(function (k) { var p = k.split('|'); return { student: p[0], field: p[1], value: dirty[k] }; }); busy(btn, '…');
+        call('certValsSave', [ME.code, d.cls, kind, rows], function () { rows.forEach(function (r) { var a = d.vals[r.student] = d.vals[r.student] || {}; (a[kind] = a[kind] || {})[r.field] = r.value; }); dirty = {}; busy(btn); Sound.play('ok'); toast('اتحفظ ✅'); }, function (er) { busy(btn); failed(er); });
+        return; }
       if ((b = e.target.closest('[data-pv]'))) { var s = d.students[Number(b.dataset.pv)]; $('cert-pv').innerHTML = '<div class="panel loading">بتترسم…</div>';
         certDraw(d, s, kind).then(function (cv) { $('cert-pv').innerHTML = '<div class="panel"><h3>👁️ ' + esc(s.name) + '</h3><img src="' + cv.toDataURL('image/jpeg', 0.85) + '" style="width:100%;border:1px solid var(--ln);border-radius:8px" alt="الشهادة"></div>'; $('cert-pv').scrollIntoView({ behavior: 'smooth' }); });
         return; }
