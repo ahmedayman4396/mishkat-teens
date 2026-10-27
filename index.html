@@ -278,8 +278,10 @@ function renderSession() {
 
 // v5.17: أسبوع التقييم — المربي بيسجّل التقييم اللي المنسق بناه، والحلقة حضور وملاحظات بس
 function isAsmtWeek() { return !!(ST.s && (ST.s.asmts || []).length); }
+// v5.17.1: في أسبوع التقييم المحتوى بيتسجل في التقييم، والقرآن بيفضل في الحلقة (إلا لو التقييم نفسه فيه قرآن)
+function sessCrit(c) { return !isAsmtWeek() || c.group === 'قرآن' && !ST.s.asmts.some(function (a) { return a.nQuran > 0; }); }
 function asmtSessionHTML(r) {
-  return '<div class="panel" style="border:2px solid var(--c)"><h3>📝 أسبوع التقييم</h3><div class="sub">الحلقة دي للتقييم: سجّل التقييم من الزرار تحت. تقييم الحلقة العادي مش مطلوب — الحضور والملاحظات بس.</div>' +
+  return '<div class="panel" style="border:2px solid var(--c)"><h3>📝 أسبوع التقييم</h3><div class="sub">' + (r.asmts.some(function (a) { return a.nQuran > 0; }) ? 'الحلقة دي للتقييم: سجّل التقييم (المحتوى والقرآن) من الزرار تحت. في الحلقة نفسها: الحضور والملاحظات بس.' : 'الحلقة دي للتقييم: سجّل تقييم المحتوى من الزرار تحت. في الحلقة نفسها: الحضور وتقييم القرآن والملاحظات بس.') + '</div>' +
     r.asmts.map(function (a) {
       var st = a.submitted ? '<span class="pill ok">✅ اتسلّم</span>' : a.done ? '<span class="pill wait">' + a.done + ' طالب متسجل</span>' : '<span class="pill">لسه</span>';
       return '<div class="ur"><span><b>' + esc(a.name) + '</b> <small style="color:var(--m)">السلّم ' + a.min + '–' + a.max + (a.nQuran ? ' • فيه القرآن' : '') + '</small> ' + st + '</span>' +
@@ -316,7 +318,7 @@ function studentHTML(st, guest) {
   if (!guest) h += '<div class="chips">' + ME.attendance.map(function (a) { return '<button type="button" class="chip' + (row.att === a ? ' on' + (ME.rated.indexOf(a) === -1 ? ' absent' : '') : '') + '" data-act="att" data-s="' + esc(st.code) + '" data-v="' + a + '">' + a + '</button>'; }).join('') + '</div>';
   if (rated || guest) {
     var g = '';
-    if (!isAsmtWeek()) critsFor(st).forEach(function (c) { if (c.group !== g) { g = c.group; h += '<div class="grp">' + (g === 'قرآن' ? '📖 القرآن' : '💡 المحتوى') + '</div>'; } h += critHTML(st.code, c, row.scores[c.key]); });
+    critsFor(st).filter(sessCrit).forEach(function (c) { if (c.group !== g) { g = c.group; h += '<div class="grp">' + (g === 'قرآن' ? '📖 القرآن' : '💡 المحتوى') + '</div>'; } h += critHTML(st.code, c, row.scores[c.key]); });
     h += '<div class="fu">' + (ST.s.session.family ? ME.followups : []).map(function (f) { var v = row.follow[f[0]]; return '<button type="button" data-act="fu" data-s="' + esc(st.code) + '" data-f="' + f[0] + '" class="' + (v === 'تم' ? 'y' : v === 'لم يتم' ? 'n' : '') + '">' + (v === 'تم' ? '✓ ' : v === 'لم يتم' ? '✗ ' : '') + f[1] + '</button>'; }).join('') +
       '<button type="button" data-act="beh" data-s="' + esc(st.code) + '" class="' + (row.behavior ? 'n' : '') + '">⚑ ملاحظة سلوكية</button></div>';
     if (row.behavior !== '' || row._showBeh) h += '<div class="f" style="margin-top:6px"><input type="text" data-in="behavior" data-s="' + esc(st.code) + '" value="' + esc(row.behavior) + '" placeholder="الموقف باختصار (بيوصل لأخصائي السلوك لو اتكرر)"></div>';
@@ -355,7 +357,7 @@ function isComplete(row) {
   if (!row.att) return false;
   if (ST.s.session.support && !row._guest && !row.support) return false;
   if (ME.rated.indexOf(row.att) === -1) return projDone(row);
-  return (isAsmtWeek() || ST.s.criteria.every(function (c) { return row.scores[c.key] !== undefined && row.scores[c.key] !== ''; })) && projDone(row);
+  return ST.s.criteria.filter(sessCrit).every(function (c) { return row.scores[c.key] !== undefined && row.scores[c.key] !== ''; }) && projDone(row);
 }
 function projDone(row) { if (!ST.s.project || row._guest || isAsmtWeek() && !row.project.status) return true; var p = row.project; if (!p.status) return false;
   return p.status !== 'سلّم' || ME.projectDims.every(function (d) { return !!p.scores[d[0]]; }); }
