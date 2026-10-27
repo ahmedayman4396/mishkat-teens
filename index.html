@@ -1623,7 +1623,7 @@ function certDraw(d, s, kind) {
       x.font = '700 30px ' + CERT_FONT; x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); if (who) { x.font = '400 28px ' + CERT_FONT; x.fillText(who, cx, sy - 16); } };
     sig(W - 420, d.girls === true ? 'مربية المجموعة' : d.girls === false ? 'مربي المجموعة' : 'مربي/ة المجموعة', d.coach);
     sig(420, 'مسؤول البرنامج', '');
-    x.textAlign = 'center'; x.font = '400 26px ' + CERT_FONT; x.fillStyle = '#777'; x.fillText(d.cls + ' • ' + new Date().toLocaleDateString('ar-EG-u-nu-latn'), W / 2, sy + 44);
+    x.textAlign = 'center'; x.font = '400 26px ' + CERT_FONT; x.fillStyle = '#777'; x.fillText(new Date().toLocaleDateString('ar-EG-u-nu-latn'), W / 2, sy + 44);
     return cv;
   });
 }
