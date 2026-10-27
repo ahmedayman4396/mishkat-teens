@@ -1590,12 +1590,13 @@ function certWords(g) {
 }
 var CERT_DEF_TPL = { titles: { mid: 'شهادة منتصف الترم', final: 'شهادة نهاية الترم', all: 'الشهادة الختامية للترم' }, intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
   yearLine: 'العام الدراسي {العام}', boxes: [{ key: 'quran', label: 'القرآن الكريم', show: true }, { key: 'content', label: 'المنهج', show: true }, { key: 'overall', label: 'التقدير العام', show: true }],
-  extra: [], note: '', sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
-var CERT_PH = ['{الاسم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التاريخ}'];
+  extra: [], note: '', details: { content: false, quran: false }, sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
+var CERT_PH = ['{الاسم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التقييم}', '{التاريخ}'];
 function certFill(str, d, s, kind) {
   var w = certWords(d.girls), what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
   var m = { '{الاسم}': s.name, '{الطالب}': w.st, '{أتم}': w.done, '{الفترة}': what, '{الترم}': d.term, '{البرنامج}': d.program, '{القسم}': d.sectionName || '', '{العام}': d.year || '',
-            '{المجموعة}': d.cls, '{المربي}': d.coach || '', '{مربي}': w.coach, '{التاريخ}': new Date().toLocaleDateString('ar-EG-u-nu-latn') };
+            '{المجموعة}': d.cls, '{المربي}': d.coach || '', '{مربي}': w.coach, '{التاريخ}': new Date().toLocaleDateString('ar-EG-u-nu-latn'),
+            '{التقييم}': d.sources ? (kind === 'all' ? d.sources.final || d.sources.mid : d.sources[kind]) || '' : '' };
   return String(str || '').replace(/\{[^{}]+\}/g, function (k) { return m.hasOwnProperty(k) ? m[k] : k; }).replace(/\s+/g, ' ').trim();
 }
 // الخانات اللي هتظهر في الشهادة دي: التقديرات + الخانات الزيادة
@@ -1604,6 +1605,14 @@ function certBoxes(d, s, kind) {
   t.boxes.forEach(function (b) { if (b.show) out.push({ label: b.label, value: g[b.key] || '', main: b.key === 'overall' }); });
   (t.extra || []).forEach(function (x) { if (x.kinds.indexOf(kind) !== -1) out.push({ label: x.label, value: x.type === 'text' ? x.text : (v[x.key] || ''), extra: true }); });
   return out.filter(function (b) { return !b.main; }).concat(out.filter(function (b) { return b.main; }));   // التقدير العام دايمًا في الآخر
+}
+// v5.15: تفاصيل التقييم (اسم المعيار — مستوى الطالب) لو متفعّلة في التصميم
+function certDetailLines(d, s, kind) {
+  var t = d.tpl || CERT_DEF_TPL, det = (s.det || {})[kind] || {}, out = [];
+  var fmt = function (xs) { return xs.map(function (x) { return x.n + ': ' + x.l; }).join('   •   '); };
+  if (t.details && t.details.content && (det.content || []).length) out.push('المنهج — ' + fmt(det.content));
+  if (t.details && t.details.quran && (det.quran || []).length) out.push('القرآن — ' + fmt(det.quran));
+  return out;
 }
 function certHas(s, kind) { var x = s[kind]; return !!(x && (x.quran || x.content || x.overall)); }
 
@@ -1626,24 +1635,26 @@ function certDraw(d, s, kind) {
     x.direction = 'rtl'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
     var fit = function (txt, size, weight, maxW) { x.font = weight + ' ' + size + 'px ' + CERT_FONT; while (x.measureText(txt).width > maxW && size > 18) { size -= 2; x.font = weight + ' ' + size + 'px ' + CERT_FONT; } return size; };
     var T = function (txt, y, size, weight, color) { if (!txt) return; fit(txt, size, weight || 400, W - 300); x.fillStyle = color || th.ink; x.fillText(txt, W / 2, y); };
-    var top = d.section === 'dar' ? 330 : 400, note = F(t.note);
+    var top = d.section === 'dar' ? 330 : 400, note = F(t.note), lines = certDetailLines(d, s, kind), cp = lines.length ? 1 : 0;   // cp = تصميم مضغوط علشان التفاصيل
     T(F(t.titles[kind]), top, 84, 900, th.title);
-    T(F(t.intro), top + 90, 38, 400);
-    T(s.name, top + 210, 96, 900, th.ink);
-    x.strokeStyle = th.c[3] || th.c[2]; x.lineWidth = 6; x.beginPath(); x.moveTo(W / 2 - 380, top + 240); x.lineTo(W / 2 + 380, top + 240); x.stroke();
-    T(F(t.line), top + 310, 36, 400);
-    if (d.year || !/\{العام\}/.test(t.yearLine)) T(F(t.yearLine), top + 362, 32, 400, '#555');
+    T(F(t.intro), top + 90 - cp * 10, 38, 400);
+    T(s.name, top + 210 - cp * 25, 96 - cp * 10, 900, th.ink);
+    x.strokeStyle = th.c[3] || th.c[2]; x.lineWidth = 6; x.beginPath(); x.moveTo(W / 2 - 380, top + 240 - cp * 25); x.lineTo(W / 2 + 380, top + 240 - cp * 25); x.stroke();
+    T(F(t.line), top + 310 - cp * 38, 36, 400);
+    if (d.year || !/\{العام\}/.test(t.yearLine)) T(F(t.yearLine), top + 362 - cp * 42, 32, 400, '#555');
     // الخانات
     var boxes = certBoxes(d, s, kind), n = boxes.length || 1, gap = n > 4 ? 26 : 50, bwid = Math.min(400, (W - 300 - gap * (n - 1)) / n);
-    var bx0 = (W - (bwid * n + gap * (n - 1))) / 2, by = top + (note ? 400 : 420), bh = note ? 145 : 170, cols = [th.c[0], th.c[2], th.c[1], th.c[3]], ci = 0;
+    var bx0 = (W - (bwid * n + gap * (n - 1))) / 2, by = top + (cp ? 352 : note ? 400 : 420), bh = cp ? 125 : note ? 145 : 170, cols = [th.c[0], th.c[2], th.c[1], th.c[3]], ci = 0, sm = cp || note;
     boxes.forEach(function (b, i) {
       var bxp = W - bx0 - (i + 1) * bwid - i * gap, col = b.main ? th.c[3] : cols[ci++ % cols.length];
       x.fillStyle = b.main ? col : '#ffffff'; x.strokeStyle = col; x.lineWidth = 5;
       var rr = 26; x.beginPath(); x.moveTo(bxp + rr, by); x.arcTo(bxp + bwid, by, bxp + bwid, by + bh, rr); x.arcTo(bxp + bwid, by + bh, bxp, by + bh, rr); x.arcTo(bxp, by + bh, bxp, by, rr); x.arcTo(bxp, by, bxp + bwid, by, rr); x.closePath(); x.fill(); x.stroke();
-      x.textAlign = 'center'; fit(b.label, 34, 700, bwid - 30); x.fillStyle = b.main ? th.ink : '#555'; x.fillText(b.label, bxp + bwid / 2, by + (note ? 50 : 58));
-      fit(b.value || '—', 56, 900, bwid - 30); x.fillStyle = th.ink; x.fillText(b.value || '—', bxp + bwid / 2, by + (note ? 115 : 132));
+      x.textAlign = 'center'; fit(b.label, 34, 700, bwid - 30); x.fillStyle = b.main ? th.ink : '#555'; x.fillText(b.label, bxp + bwid / 2, by + (cp ? 45 : note ? 50 : 58));
+      fit(b.value || '—', cp ? 48 : 56, 900, bwid - 30); x.fillStyle = th.ink; x.fillText(b.value || '—', bxp + bwid / 2, by + (cp ? 100 : note ? 115 : 132));
     });
-    if (note) { x.textAlign = 'center'; fit(note, 32, 700, W - 300); x.fillStyle = th.title; x.fillText(note, W / 2, by + bh + 52); }
+    var ly = by + bh + 44;
+    lines.forEach(function (ln) { x.textAlign = 'center'; fit(ln, 27, 700, W - 260); x.fillStyle = th.ink; x.fillText(ln, W / 2, ly); ly += 40; });
+    if (note) { x.textAlign = 'center'; fit(note, cp ? 28 : 32, 700, W - 300); x.fillStyle = th.title; x.fillText(note, W / 2, cp ? ly + 2 : by + bh + 52); }
     // التوقيعات
     var sy = H - 190;
     var sig = function (cx, label, who) { x.textAlign = 'center'; x.strokeStyle = '#999'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 190, sy); x.lineTo(cx + 190, sy); x.stroke();
@@ -1724,8 +1735,10 @@ function certTplEdit(section) {
   call('certTpl', [ME.code, section], function (r) {
     var t = JSON.parse(JSON.stringify(r.tpl)), kind = 'mid', timer = null;
     var sample = { cls: section === 'dar' ? 'مجموعة الدار' : 'T1_السبت_بنات03', section: section, sectionName: section === 'dar' ? 'دار مشكاة' : 'مشكاة Teens', program: section === 'dar' ? 'دار مشكاة – البرنامج الأساسي' : 'Teens – البرنامج الأساسي',
-      term: 'الترم الأول', year: '2026/2027', coach: 'Sohaila Osama', girls: true, tpl: t, vals: { S1: { mid: {}, final: {}, all: {} } } };
-    var stu = { code: 'S1', name: 'سارة محمد أحمد', mid: { quran: 'جيد جدا', content: 'ممتاز', overall: 'ممتاز' }, final: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' }, all: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' } };
+      term: 'الترم الأول', year: '2026/2027', coach: 'Sohaila Osama', girls: true, tpl: t, vals: { S1: { mid: {}, final: {}, all: {} } },
+      sources: { mid: 'تقييم منتصف الترم – Discover', final: 'تقييم نهاية الترم – Discover' } };
+    var dt = { content: [{ n: 'ربي: أعرف', l: 'متقدم' }, { n: 'ربي: أعيش', l: 'جيد' }, { n: 'رسولي', l: 'متقدم' }, { n: 'آيتي', l: 'يتطور' }], quran: [{ n: 'الحفظ', l: 'ممتاز' }, { n: 'التجويد', l: 'جيد جدا' }, { n: 'المعاني', l: 'ممتاز' }] };
+    var stu = { code: 'S1', name: 'سارة محمد أحمد', mid: { quran: 'جيد جدا', content: 'ممتاز', overall: 'ممتاز' }, final: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' }, all: { quran: 'ممتاز', content: 'ممتاز', overall: 'ممتاز' }, det: { mid: dt, final: dt, all: dt } };
     var inp = function (id, val, ph) { return '<input type="text" data-tf="' + id + '" value="' + esc(val) + '" placeholder="' + esc(ph || '') + '">'; };
     var draw = function () {
       var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>✏️ تصميم شهادة ' + (section === 'dar' ? 'دار مشكاة' : 'Teens') + '</h3>' +
@@ -1734,6 +1747,9 @@ function certTplEdit(section) {
         '<div class="f"><label class="lb">السطر اللي قبل الاسم:</label>' + inp('intro', t.intro) + '</div><div class="f"><label class="lb">السطر اللي بعد الاسم:</label>' + inp('line', t.line) + '</div>' +
         '<div class="f"><label class="lb">سطر العام الدراسي (فاضي = مش هيظهر):</label>' + inp('yearLine', t.yearLine) + '</div></div>';
       h += '<div class="panel"><h3>خانات التقدير</h3>' + t.boxes.map(function (b, i) { return '<div class="row" style="align-items:center;margin:4px 0"><label style="flex:0 0 auto"><input type="checkbox" data-bs="' + i + '"' + (b.show ? ' checked' : '') + '> يظهر</label>' + inp('boxes.' + i + '.label', b.label) + '</div>'; }).join('') + '</div>';
+      h += '<div class="panel"><h3>🔎 تفاصيل التقييم</h3><div class="sub">بيكتب تحت الخانات اسم كل معيار ومستوى الطالب فيه بالكلام (من غير أرقام) — زي «ربي: أعرف: جيد • رسولي: متقدم».</div><div class="chk">' +
+        '<label class="' + (t.details.content ? 'on' : '') + '"><input type="checkbox" data-dt="content"' + (t.details.content ? ' checked' : '') + '>تفاصيل المنهج معيار معيار</label>' +
+        '<label class="' + (t.details.quran ? 'on' : '') + '"><input type="checkbox" data-dt="quran"' + (t.details.quran ? ' checked' : '') + '>تفاصيل القرآن (الحفظ / التجويد / المعاني)</label></div></div>';
       h += '<div class="panel"><h3>➕ خانات زيادة</h3><div class="sub">«لكل طالب» = بتكتبها لكل طالب من شاشة المجموعة (زي السلوك). «نص ثابت» = نفس الكلام لكل الطلاب. لحد 4 خانات.</div>' +
         t.extra.map(function (e, i) { return '<div style="border:1px solid var(--ln);border-radius:10px;padding:8px;margin:6px 0"><div class="row" style="align-items:center">' + inp('extra.' + i + '.label', e.label, 'اسم الخانة (زي: السلوك)') +
           '<select data-xt="' + i + '" style="flex:0 0 auto;width:auto">' + opts([{ v: 'student', l: 'لكل طالب' }, { v: 'text', l: 'نص ثابت' }], e.type) + '</select><button class="btn ghost" type="button" data-xd="' + i + '" style="flex:0 0 auto;width:auto">✕</button></div>' +
@@ -1756,6 +1772,7 @@ function certTplEdit(section) {
     mm.oninput = function (e) { var el = e.target; if (el.dataset.tf) { setPath(el.dataset.tf, el.value); preview(); } };
     mm.onchange = function (e) { var el = e.target, q;
       if (el.dataset.bs != null) { t.boxes[Number(el.dataset.bs)].show = el.checked; preview(); }
+      else if (el.dataset.dt) { t.details = t.details || {}; t.details[el.dataset.dt] = el.checked; el.parentNode.classList.toggle('on', el.checked); preview(); }
       else if (el.dataset.xt != null) { t.extra[Number(el.dataset.xt)].type = el.value; draw(); }
       else if (el.dataset.xk) { q = el.dataset.xk.split('|'); var ks = t.extra[Number(q[0])].kinds, at = ks.indexOf(q[1]); if (el.checked && at === -1) ks.push(q[1]); if (!el.checked && at !== -1) ks.splice(at, 1); el.parentNode.classList.toggle('on', el.checked); preview(); } };
     mm.onclick = function (e) { var b;
