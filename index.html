@@ -1550,8 +1550,9 @@ $('tabs').addEventListener('click', function (e) { var b = e.target.closest('but
 // ======================================================================
 var CERT_KINDS = { mid: { t: 'شهادة منتصف الترم', short: 'الميد' }, final: { t: 'شهادة نهاية الترم', short: 'الفاينال' }, all: { t: 'الشهادة الختامية للترم', short: 'الترم كله' } };
 var CERT_THEME = {
-  teens: { logo: 'logo-teens.svg', ar: 451 / 640, c: ['#009cdd', '#45c6f5', '#c4d32b', '#fecd18'], ink: '#0b3c5d', title: '#009cdd' },
-  dar: { logo: 'logo-dar.svg', ar: 1143 / 348, c: ['#2daad9', '#8fd3ec', '#e3b341', '#f3e2b3'], ink: '#123d52', title: '#2daad9' }
+  // كلمة «Meshkat Teens» تحت اللوجو: Meshkat بالأزرق و Teens بالأخضر (بدل الأسود) — بيتقسموا عند x=268 في اللوجو
+  teens: { logo: 'logo-teens.svg', ar: 451 / 640, c: ['#009cdd', '#45c6f5', '#c4d32b', '#fecd18'], ink: '#0b3c5d', title: '#009cdd', word: { split: 268, a: '#009cdd', b: '#c4d32b' } },
+  dar: { logo: 'logo-dar.svg', ar: 1000 / 306, c: ['#069ade', '#5ebee9', '#c5cf35', '#d9df77'], ink: '#0b3c5d', title: '#069ade' }
 };
 var CERT_FONT = 'Cairo, "Segoe UI", Tahoma, sans-serif';
 var certImg = {};
@@ -1566,9 +1567,20 @@ function certFont() {
   });
   return certFont.p;
 }
-function certLogo(src) {
+function certLogo(th) {
+  var src = th.logo;
   if (certImg[src]) return certImg[src];
-  certImg[src] = new Promise(function (ok) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { ok(null); }; i.src = src; });
+  var load = function (u) { return new Promise(function (ok) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { ok(null); }; i.src = u; }); };
+  certImg[src] = !th.word ? load(src) : fetch(src).then(function (r) { return r.text(); }).then(function (svg) {
+    // الكلمة اللي تحت اللوجو مرسومة بالأسود — بنلوّنها نصّين بألوان اللوجو
+    var W = th.word, m = svg.match(/<path fill="#050505"([^>]*)>/);
+    if (!m) return load(src);
+    var p = function (fill, clip) { return '<path fill="' + fill + '" clip-path="url(#' + clip + ')"' + m[1] + '>'; };
+    svg = svg.replace(m[0], p(W.a, 'mkA') + p(W.b, 'mkB'))
+      .replace(/(<svg[^>]*>)/, '$1<defs><clipPath id="mkA"><rect x="0" y="0" width="' + W.split + '" height="10000"/></clipPath><clipPath id="mkB"><rect x="' + W.split + '" y="0" width="10000" height="10000"/></clipPath></defs>');
+    var u = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    return load(u);
+  }, function () { return load(src); });
   return certImg[src];
 }
 // شكل الكلام على حسب نوع المجموعة (بنات / بنين / مش معروف)
@@ -1580,7 +1592,7 @@ function certHas(s, kind) { var x = s[kind]; return !!(x && (x.quran || x.conten
 function certDraw(d, s, kind) {
   var W = 1754, H = 1240, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   var th = CERT_THEME[d.section] || CERT_THEME.teens, x = cv.getContext('2d'), w = certWords(d.girls), g = s[kind] || {};
-  return Promise.all([certFont(), certLogo(th.logo)]).then(function (r) {
+  return Promise.all([certFont(), certLogo(th)]).then(function (r) {
     var logo = r[1];
     x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
     // إطار بألوان اللوجو
