@@ -224,12 +224,14 @@ function coachHome() {
       return '<div class="cls ok" data-cls="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
         (c.hasTerm ? ' • ' + esc(c.term) : ' • <span class="pill wait">مفيش ترم حالي</span>') + '</div></div>';
     }).join('') : '<div class="empty">مفيش مجموعات مسجلة باسمك.</div>') +
-    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button> <button class="btn sec" type="button" id="myq-btn">🕌 تقييماتي من قسم القرآن</button> <button class="btn sec" type="button" id="mym-btn">🗓️ حضوري في الاجتماعات</button></div><div id="sub-list"></div><div id="todo"></div>');
+    '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button> <button class="btn sec" type="button" id="myq-btn">🕌 تقييماتي من قسم القرآن</button> <button class="btn sec" type="button" id="mym-btn">🗓️ حضوري في الاجتماعات</button> <button class="btn ' + (ME.myWarns ? '' : 'sec') + '" type="button" id="myw-btn">⚠️ التنبيهات' + (ME.myWarns ? ' (' + ME.myWarns + ' جديد)' : '') + '</button></div><div id="sub-list"></div><div id="todo"></div>');
   loadTodo();
   $('main').onclick = function (e) {
     var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, null, c.dataset.sub === '1'); return; }
     if (e.target.id === 'myq-btn') { myQuranEvals(); return; }
     if (e.target.id === 'mym-btn') { myMeetingsView(); return; }
+    if (e.target.id === 'myw-btn') { myWarnsView(); return; }
+    var ak = e.target.closest('[data-ack]'); if (ak) { var nt = prompt('تحب تكتب رد؟ (اختياري)') || ''; call('ackWarn', [ME.code, ak.dataset.ack, nt], function () { Sound.play('ok'); toast('اتسجل إنك اطّلعت'); ME.myWarns = Math.max(0, (ME.myWarns || 1) - 1); myWarnsView(); }); return; }
     if (e.target.id === 'sub-btn') {
       $('sub-list').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
       call('substituteClasses', [ME.code], function (list) {
@@ -483,9 +485,10 @@ function followHome(off) {
     var h = '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-w="' + (off - 1) + '">→ الأسبوع اللي فات</button><div style="text-align:center;font-weight:bold;color:var(--c)">' +
       (off === 0 ? 'الأسبوع الحالي' : off < 0 ? 'قبل ' + (-off) + ' أسبوع' : 'بعد ' + off + ' أسبوع') + '</div><button class="btn sm sec" type="button" data-w="' + (off + 1) + '"' + (off >= 0 ? ' disabled' : '') + '>الأسبوع الجاي ←</button></div></div>' +
       '<div class="stats"><div class="stat"><b>' + done + '/' + sessions.length + '</b><span>حلقات اتسجلت</span></div><div class="stat"><b>' + late + '</b><span>متأخرة / فائتة</span></div><div class="stat"><b>' + (total ? Math.round(present / total * 100) + '%' : '—') + '</b><span>الحضور</span></div></div>';
+    if (ME.isCoord) h += '<div class="panel"><button class="btn sec" type="button" data-myev="1">📝 متابعتي وتقييماتي من الجودة</button></div>';
     h += list.length ? list.map(classCardHTML).join('') : '<div class="panel empty">مفيش مجموعات ضمن صلاحياتك.</div>';
     main(h);
-    $('main').onclick = function (e) { var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
+    $('main').onclick = function (e) { if (e.target.closest('[data-myev]')) { coordDetailView(ME.userCode); return; } var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
   });
 }
 function classCardHTML(c) {
@@ -511,27 +514,33 @@ function followClass(cls) {
     ST.fc = d;
     var done = d.sessions.filter(function (s) { return s.status === 'done'; });
     var h = '<button class="back" type="button" data-a="back">→ رجوع للوحة</button><div class="panel"><h3>' + esc(d.cls) + '</h3><div class="sub">' + esc(d.level || '') + ' • ' + esc(d.term) + ' • 👤 ' + esc(d.coaches.join(' • ')) + '</div>' +
-      '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 زيارة صفية جديدة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء حلقة</button></div></div>';
+      (ME.qualityOnly ? '<div class="sub">👁️ مشاهدة بس (الجودة)</div>' : '<div class="row"><button class="btn sm" type="button" data-a="visit">🏫 زيارة صفية جديدة</button><button class="btn sm sec" type="button" data-a="cancel">🚫 إلغاء حلقة</button></div>') + '</div>';
     if (false && d.examSummary) { var es = d.examSummary;   // v5.17: النموذج القديم اتشال — التقييم من «📝 التقييمات»
       h += '<div class="panel"><h3>📝 الاختبارات</h3><div class="line"><span class="k">الاختبارات</span>' + Object.keys(es.exams).map(function (k) { var x = es.exams[k];
           return '<span class="pill ' + (x.done >= x.total && x.total ? 'ok' : x.done ? 'wait' : '') + '">' + esc(k) + ' ' + x.done + '/' + x.total + '</span>'; }).join('') + '</div>' +
         '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-a="exam">📝 الميد / الفاينال</button></div></div>'; }
     if (d.pending.length) h += '<div class="panel"><h3>🆕 طلاب مستنيين تأكيد</h3>' + d.pending.map(function (p) {
-      return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span><span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span></div>'; }).join('') + '</div>';
+      return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span>' + (ME.qualityOnly ? '' : '<span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span>') + '</div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>👥 الطلاب (' + d.students.filter(function (s) { return s.status !== 'منسحب' && s.status !== 'مرفوض'; }).length + ')</h3>' + d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
       return '<div class="ur' + (s.status === 'منسحب' ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : '') +
         ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center">' +
-        '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px">' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
-        (s.status !== 'منسحب' ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
+        '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
+        (s.status !== 'منسحب' && !ME.qualityOnly ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>🏫 الزيارات الصفية</h3><div id="vhist" class="sub">جاري التحميل…</div></div>';
+    h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3><div id="whist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>🗓️ الحلقات المسجلة</h3>' + (done.length ? done.map(function (s) { return '<button class="btn sm sec" type="button" data-a="sess" data-n="' + s.n + '" style="margin:3px">ح' + s.n + '</button>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div><div id="fbox"></div>';
-    main(h); visitHistoryBox(cls);
+    main(h); visitHistoryBox(cls); warnBox(cls);
     var m = $('main');
     m.onclick = function (e) { var b = e.target.closest('[data-a]'); if (!b) return; e.preventDefault(); var a = b.dataset.a;
       if (a === 'back') followHome(FW);
       else if (a === 'confirm' || a === 'reject') call('setEnrollment', [ME.code, cls, b.dataset.c, a], function () { Sound.play('ok'); followClass(cls); });
       else if (a === 'withdraw') { var n = prompt('انسحب من أنهي حلقة؟ (رقم الحلقة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
       else if (a === 'report') report(b.dataset.c);
+      else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel)$/.test(a)) return;
+      else if (a === 'wnew') warnForm(cls, b.dataset.c);
+      else if (a === 'wcancel') { var why = prompt('سبب إلغاء الإنذار؟'); if (why == null) return; call('cancelWarn', [ME.code, b.dataset.id, why], function () { toast('اتلغى'); warnBox(cls); }); }
+      else if (a === 'wsave') saveWarnForm(cls, b);
+      else if (a === 'wlv') { [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); }
       else if (a === 'birth') { var v = prompt('تاريخ الميلاد (زي 2019-05-14) أو السنة بس:', b.dataset.b || ''); if (v == null) return;
         call('setEnrollment', [ME.code, cls, b.dataset.c, 'birth', v.trim()], function (r) { Sound.play('ok'); toast(r.age ? 'اتسجل — ' + r.age + ' سنين' : 'اتمسح'); followClass(cls); }); }
       else if (a === 'sess') followSession(cls, Number(b.dataset.n));
@@ -555,7 +564,7 @@ function followSession(cls, n) {
     $('fbox').innerHTML = '<div class="panel"><h3>حلقة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • ' + esc(sv.timing) + '</h3><div class="sub">اضغط على أي درجة علشان تصححها (التعديل بيتسجل).</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
       d.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' + sv.students.map(function (s) {
         return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(s.att) + '</td>' + d.criteria.map(function (c) {
-          return '<td class="ed" data-a="cell" data-st="' + esc(s.code) + '" data-k="' + c.key + '" data-n="' + n + '">' + sc(s.scores[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+          return '<td' + (ME.qualityOnly ? '' : ' class="ed" data-a="cell"') + ' data-st="' + esc(s.code) + '" data-k="' + c.key + '" data-n="' + n + '">' + sc(s.scores[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
       sv.students.filter(function (s) { return s.notes || s.behavior; }).map(function (s) { return '<div class="note"><b>' + esc(s.name) + ':</b> ' + esc(s.notes) + (s.behavior ? ' <span class="pill no">⚑ ' + esc(s.behavior) + '</span>' : '') + '</div>'; }).join('') + '</div>';
     $('fbox').scrollIntoView({ behavior: 'smooth' });
   });
@@ -565,6 +574,155 @@ function correctCell(cls, td) {
   if (v === 'ل') v = ME.notObserved; else if (!/^[1-5]$/.test(v)) { toast('اكتب رقم من 1 لـ 5'); return; }
   call('correctEval', [ME.code, cls, td.dataset.n, td.dataset.st, td.dataset.k, v], function () { Sound.play('ok'); toast('اتصحح ✅'); followSession(cls, Number(td.dataset.n)); });
 }
+// ---------- v5.19: التنبيهات والإنذارات (المنسق ← المربي) ----------
+var WLV_COL = { 'تنبيه': '#f5b400', 'إنذار أول': '#e07b22', 'إنذار نهائي': '#e53935' };
+function warnRow(w, canCancel) {
+  return '<div class="ur" style="align-items:flex-start"><span><span class="pill" style="background:' + (WLV_COL[w.level] || '#999') + ';color:#fff">' + esc(w.level) + '</span> <b>' + esc(w.reason) + '</b> <small style="color:var(--m)">' + esc(w.date) + ' • ' + esc(w.by) + (w.cls ? ' • ' + esc(w.cls) : '') + '</small>' +
+    '<br><small>' + esc(w.details) + '</small>' + (w.seen ? '<br><small style="color:var(--l5)">✅ المربي اطّلع ' + esc(w.seen.slice(0, 16)) + (w.seenNote ? ' — «' + esc(w.seenNote) + '»' : '') + '</small>' : '<br><small style="color:var(--warn)">⏳ المربي لسه ما اطّلعش</small>') + '</span>' +
+    (canCancel ? '<button class="btn ghost" type="button" data-a="wcancel" data-id="' + esc(w.id) + '">إلغاء</button>' : '') + '</div>';
+}
+function warnBox(cls) {
+  call('classWarns', [ME.code, cls], function (d) {
+    ST.wb = d; var el = $('whist'); if (!el) return;
+    el.innerHTML = d.coaches.map(function (c) {
+      return '<div style="margin:6px 0"><div class="row" style="align-items:center"><b>👤 ' + esc(c.name) + '</b> <small style="color:var(--m)">' + (c.list.length ? c.list.length + ' في الترم ده' : 'مفيش') + '</small>' +
+        (d.canWarn ? '<button class="btn sm sec" type="button" data-a="wnew" data-c="' + esc(c.code) + '" style="flex:0 0 auto;margin-inline-start:auto">⚠️ ' + esc(c.next) + '</button>' : '') + '</div>' +
+        c.list.map(function (w) { return warnRow(w, d.canWarn); }).join('') + '</div>'; }).join('') || '<div class="empty">مفيش مربي على المجموعة دي.</div>';
+  });
+}
+function warnForm(cls, coach) {
+  var d = ST.wb, c = d.coaches.filter(function (x) { return x.code === coach; })[0], todayS = new Date().toISOString().slice(0, 10);
+  $('fbox').innerHTML = '<div class="panel"><h3>⚠️ تنبيه / إنذار — ' + esc(c.name) + '</h3><div class="sub">' + (c.list.length ? 'عنده ' + c.list.length + ' قبل كده في الترم ده — الدرجة المقترحة: <b>' + esc(c.next) + '</b>' : 'أول مرة في الترم ده — الدرجة المقترحة: <b>تنبيه</b>') + '</div>' +
+    '<div class="f"><label class="lb">الدرجة:</label><div class="chips">' + d.levels.map(function (l) { return '<button type="button" class="chip' + (l === c.next ? ' on' : '') + '" data-a="wlv" data-v="' + esc(l) + '">' + esc(l) + '</button>'; }).join('') + '</div></div>' +
+    '<div class="row"><div class="f"><label class="lb">السبب:</label><select id="wreason">' + opts(d.reasons, '', 'اختار السبب') + '</select></div><div class="f"><label class="lb">تاريخ الواقعة:</label><input type="date" id="wdate" value="' + todayS + '"></div></div>' +
+    '<div class="f"><label class="lb">التفاصيل (حصل إيه، وإمتى، واتفقتوا على إيه):</label><textarea id="wdet"></textarea></div>' +
+    '<div class="sub">المربي هيشوفه في حسابه ويأكّد إنه اطّلع.</div><button class="btn" type="button" data-a="wsave" data-c="' + esc(coach) + '">حفظ ✅</button></div>';
+  $('fbox').scrollIntoView({ behavior: 'smooth' });
+}
+function saveWarnForm(cls, b) {
+  var f = $('fbox'), lv = f.querySelector('[data-a="wlv"].on');
+  busy(b, '⏳');
+  call('saveWarn', [ME.code, cls, { coach: b.dataset.c, level: lv ? lv.dataset.v : '', reason: $('wreason').value, date: $('wdate').value, details: $('wdet').value }],
+    function () { busy(b); Sound.play('ok'); toast('اتسجل ✅'); f.innerHTML = ''; warnBox(cls); }, function (e) { busy(b); failed(e); });
+}
+// المربي: تنبيهاتي
+function myWarnsView() {
+  $('sub-list').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
+  call('myWarns', [ME.code], function (list) {
+    $('sub-list').innerHTML = '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3>' + (list.length ? list.map(function (w) {
+      return warnRow(w, false).replace('</span></div>', '</span>' + (w.seen ? '' : '<button class="btn sm" type="button" data-ack="' + esc(w.id) + '" style="flex:0 0 auto">👍 اطّلعت</button>') + '</div>'); }).join('')
+      : '<div class="empty">مفيش حاجة 👏</div>') + '</div>';
+  });
+}
+
+// ---------- v5.19: متابعة المنسقين (للجودة والإدارة) ----------
+function qualityTabs(cur) {
+  if (!ME.coordBoard) return '';
+  return '<div class="chips" style="margin:0 0 10px"><button type="button" class="chip' + (cur === 'late' ? ' on' : '') + '" data-qt="late">🚦 المتأخرات</button><button type="button" class="chip' + (cur === 'coord' ? ' on' : '') + '" data-qt="coord">👥 متابعة المنسقين</button></div>';
+}
+function mLine(m) {
+  var w = m.warnsByLevel || {};
+  return '<div class="line"><span class="pill">' + m.groups + ' مجموعة • ' + m.coaches + ' مربي</span><span class="pill ' + (m.notVisited.length ? 'wait' : 'ok') + '">🏫 ' + m.visits + ' زيارة' + (m.notVisited.length ? ' • ' + m.notVisited.length + ' ما اتزارتش' : '') + '</span>' +
+    '<span class="pill ' + (m.missing ? 'wait' : 'ok') + '">📋 ' + (m.onTimePct == null ? 'لسه مفيش حلقات متسجلة' : m.onTimePct + '% من الحلقات في ميعادها') + (m.missing ? ' • ' + m.missing + ' حلقة ناقصة' : '') + '</span>' +
+    (m.tasksOpen ? '<span class="pill wait">مهام «لم يتم» ' + m.tasksOpen + '</span>' : '') +
+    '<span class="pill">⚠️ ' + m.warns + (m.warns ? ' (' + Object.keys(w).filter(function (k) { return w[k]; }).map(function (k) { return k + ' ' + w[k]; }).join('، ') + ')' : '') + '</span>' +
+    (m.pending ? '<span class="pill wait">🆕 ' + m.pending + ' مستني تأكيد</span>' : '') + (m.followDue ? '<span class="pill wait">⏰ ' + m.followDue + ' متابعة زيارة فات ميعادها</span>' : '') + (m.casesLate ? '<span class="pill wait">📂 ' + m.casesLate + ' حالة متأخرة</span>' : '') + '</div>';
+}
+function coordBoardView() {
+  loading();
+  var q = ST.cq || { from: '', to: '' };
+  call('coordBoard', [ME.code, q.from, q.to], function (d) {
+    var h = qualityTabs('coord') + '<div class="panel"><h3>👥 متابعة المنسقين</h3><div class="sub">أرقام كل منسق من السيستم: زياراته، تسجيل الحلقات في مجموعاته، الإنذارات اللي اداها للمربيين، والحاجات المتأخرة. اختار فترة أو سيبها فاضية للترم كله.</div>' +
+      '<div class="row"><div class="f"><label class="lb">من:</label><input type="date" id="cq-from" value="' + esc(q.from) + '"></div><div class="f"><label class="lb">إلى:</label><input type="date" id="cq-to" value="' + esc(q.to) + '"></div></div></div>';
+    h += d.list.length ? d.list.map(function (c) {
+      return '<div class="cls ok" data-cd="' + esc(c.code) + '"><h4>' + esc(c.name) + ' <small style="color:var(--m);font-weight:normal">' + esc([c.section, c.branch].filter(String).join(' • ')) + '</small></h4>' + mLine(c.m) +
+        '<div class="m">' + (c.lastEval ? '📝 آخر تقييم ' + esc(c.lastEval.date) + ' — متوسط ' + esc(c.lastEval.avg) + ' من 4 (' + esc(c.lastEval.by) + ')' : '📝 لسه ما اتقيّمش') + '</div></div>'; }).join('')
+      : '<div class="panel empty">مفيش منسقين ضمن صلاحياتك.</div>';
+    main(h);
+    var m = $('main');
+    m.onclick = function (e) { var t = e.target.closest('[data-qt]'); if (t) { if (t.dataset.qt === 'late') qualityHome(); return; }
+      var c = e.target.closest('[data-cd]'); if (c) coordDetailView(c.dataset.cd); };
+    m.onchange = function (e) { if (e.target.id === 'cq-from' || e.target.id === 'cq-to') { ST.cq = { from: $('cq-from').value, to: $('cq-to').value }; coordBoardView(); } };
+  });
+}
+function coordDetailView(code) {
+  loading();
+  var q = ST.cq || { from: '', to: '' };
+  call('coordDetail', [ME.code, code, q.from, q.to], function (d) {
+    ST.cdd = d;
+    var h = (d.self ? '<button class="back" type="button" data-cb="1">→ رجوع</button>' : '<button class="back" type="button" data-cb="1">→ رجوع للمنسقين</button>') +
+      '<div class="panel"><h3>👤 ' + esc(d.name) + '</h3>' + mLine(d.m) + (d.m.notVisited.length ? '<div class="sub">ما اتزارتش: ' + esc(d.m.notVisited.join('، ')) + '</div>' : '') +
+      (d.canEval ? '<button class="btn" type="button" data-ce="1" style="margin-top:8px">📝 تقييم جديد للمنسق</button>' : '') + '</div><div id="cebox"></div>';
+    h += '<div class="panel"><h3>📝 تقييمات الجودة (' + d.evals.length + ')</h3>' + (d.evals.length ? d.evals.map(function (v, i) {
+      return '<div class="cls ok" data-ev="' + i + '"><h4>' + esc(v.time.slice(0, 10)) + ' — متوسط ' + esc(v.avg) + ' من 4</h4><div class="m">' + esc(v.by) + (v.from || v.to ? ' • الفترة ' + esc(v.from || '…') + ' ← ' + esc(v.to || '…') : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div>';
+    h += '<div class="panel"><h3>⚠️ الإنذارات اللي اداها (' + d.warns.length + ')</h3>' + (d.warns.length ? d.warns.map(function (w) { return warnRow(w, false); }).join('') : '<div class="empty">مفيش.</div>') + '</div>';
+    h += '<div class="panel"><h3>🏫 زياراته (' + d.visits.length + ')</h3>' + (d.visits.length ? d.visits.map(function (v) { return '<div class="line"><span class="k">' + esc(v.date) + ' • ' + esc(v.cls) + '</span><small>' + esc(v.kind) + ' • ' + esc(v.coach || '') + (v.avg !== '' && v.avg != null ? ' • متوسط ' + esc(v.avg) : '') + (v.followDate ? ' • ⏰ ' + esc(v.followDate) : '') + '</small></div>'; }).join('') : '<div class="empty">مفيش.</div>') + '</div>';
+    h += '<div class="panel"><h3>👥 مجموعاته (' + d.classes.length + ')</h3>' + d.classes.map(function (c) { return '<div class="line"><span class="k">' + esc(c.name) + '</span><small>' + esc(c.coach) + '</small></div>'; }).join('') + '</div>';
+    main(h);
+    var m = $('main');
+    m.onclick = function (e) {
+      var b;
+      if (e.target.closest('[data-cb]')) { if (d.self) followHome(FW || 0); else coordBoardView(); return; }
+      if (e.target.closest('[data-ce]')) { coordEvalForm(d); return; }
+      if ((b = e.target.closest('[data-ev]'))) { coordEvalView(d.evals[Number(b.dataset.ev)]); return; }
+      if ((b = e.target.closest('[data-a="vsc"]'))) { coordPick(b); return; }
+      if (e.target.closest('[data-a="cesave"]')) { saveCoordEvalForm(d, e.target); }
+    };
+  });
+}
+function coordEvalForm(d) {
+  var go = function (M) {
+    ST.cmeta = M; ST.ceval = {}; var q = ST.cq || {};
+    var h = '<div class="panel"><h3>📝 تقييم المنسق — ' + esc(d.name) + '</h3><div class="sub">الأرقام اللي فوق بتتحفظ مع التقييم. السلّم: ' + M.scale.map(function (x) { return (x[0] === 'NO' ? 'N/O' : x[0]) + ' ' + x[1]; }).join(' • ') + '</div>' +
+      '<div class="row"><div class="f"><label class="lb">الفترة من:</label><input type="date" id="ce-from" value="' + esc(q.from || '') + '"></div><div class="f"><label class="lb">إلى:</label><input type="date" id="ce-to" value="' + esc(q.to || new Date().toISOString().slice(0, 10)) + '"></div></div></div>';
+    M.sections.forEach(function (sec) {
+      h += '<div class="panel"><h3>' + esc(sec) + '</h3>' + M.items.filter(function (i) { return i.section === sec; }).map(function (it, n) {
+        return '<div style="border-bottom:1px solid var(--ln);padding:8px 0"><div><b>' + (n + 1) + '. ' + esc(it.name) + '</b>' + (it.hint ? ' <small style="color:var(--m)">(' + esc(it.hint) + ')</small>' : '') + '</div>' +
+          '<div class="row" style="gap:5px;margin-top:6px;flex-wrap:nowrap">' + ['NO', 1, 2, 3, 4].map(function (v) {
+            return '<button type="button" class="btn sm ghost" data-a="vsc" data-c="' + esc(it.key) + '" data-v="' + v + '" style="flex:1;min-width:0;padding:8px 2px;border:2px solid ' + VLV_COL[v] + ';color:' + VLV_COL[v] + '">' + (v === 'NO' ? 'N/O' : v) + '</button>'; }).join('') + '</div>' +
+          '<div class="desc" id="cd-' + esc(it.key) + '" style="margin:4px 0 0"></div><input type="text" data-cn="' + esc(it.key) + '" placeholder="ملاحظة / دليل (اختياري)" style="margin-top:6px;padding:7px;font-size:14px"></div>'; }).join('') + '</div>';
+    });
+    h += '<div class="panel"><h3>⭐ نقاط القوة</h3>' + [0, 1, 2].map(function (i) { return '<input type="text" data-cs="' + i + '" placeholder="' + (i + 1) + '." style="margin:3px 0">'; }).join('') +
+      '<h3 style="margin-top:10px">📈 أولويات التحسين</h3>' + [0, 1, 2].map(function (i) { return '<input type="text" data-ci="' + i + '" placeholder="' + (i + 1) + '." style="margin:3px 0">'; }).join('') +
+      '<h3 style="margin-top:10px">⚙️ خطة المتابعة</h3><textarea id="ce-plan" placeholder="هنتابع إيه ومع مين وإمتى"></textarea>' +
+      '<h3 style="margin-top:10px">📝 ملاحظات</h3><textarea id="ce-notes"></textarea>' +
+      '<button class="btn" type="button" data-a="cesave" style="margin-top:10px">حفظ التقييم ✅</button></div>';
+    $('cebox').innerHTML = h; $('cebox').scrollIntoView({ behavior: 'smooth' });
+  };
+  if (ST.cmeta) go(ST.cmeta); else { $('cebox').innerHTML = '<div class="panel loading">جاري التحميل…</div>'; call('coordEvalMeta', [ME.code], go); }
+}
+function coordPick(b) {
+  var M = ST.cmeta, k = b.dataset.c, v = b.dataset.v === 'NO' ? 'NO' : Number(b.dataset.v), o = ST.ceval[k] = ST.ceval[k] || {};
+  o.v = v; [].forEach.call(b.parentNode.children, function (x) { var on = x === b, col = VLV_COL[x.dataset.v]; x.style.background = on ? col : ''; x.style.color = on ? '#fff' : col; });
+  var sx = M.scale.filter(function (s) { return String(s[0]) === String(v); })[0], el = $('cd-' + k); if (el && sx) el.textContent = sx[1] + ' — ' + sx[2];
+  Sound.play('tap');
+}
+function saveCoordEvalForm(d, b) {
+  var M = ST.cmeta, f = $('cebox');
+  [].forEach.call(f.querySelectorAll('[data-cn]'), function (e) { if (e.value.trim()) { var o = ST.ceval[e.dataset.cn] = ST.ceval[e.dataset.cn] || {}; o.n = e.value; } });
+  var miss = M.items.filter(function (i) { return !ST.ceval[i.key] || ST.ceval[i.key].v === undefined; });
+  if (miss.length) { Sound.play('err'); toast('ناقص ' + miss.length + ' بند — اختار درجة أو N/O (أولهم: ' + miss[0].name + ')'); var mb = f.querySelector('[data-c="' + miss[0].key + '"]'); if (mb) mb.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  var list = function (attr) { return [].map.call(f.querySelectorAll('[' + attr + ']'), function (e) { return e.value; }); };
+  busy(b, 'جاري الحفظ… ⏳');
+  call('saveCoordEval', [ME.code, d.code, { from: $('ce-from').value, to: $('ce-to').value, scores: ST.ceval, strengths: list('data-cs'), improve: list('data-ci'), plan: $('ce-plan').value, notes: $('ce-notes').value }],
+    function (r) { busy(b); Sound.play('ok'); toast('اتحفظ ✅ — المتوسط ' + r.avg); coordDetailView(d.code); }, function (e) { busy(b); failed(e); });
+}
+function coordEvalView(v) {
+  var go = function (M) {
+    ST.cmeta = M;
+    var ul = function (xs) { return xs.length ? '<ol>' + xs.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>' : '<div class="sub">—</div>'; };
+    var h = '<div class="panel"><h3>📝 تقييم ' + esc(v.time.slice(0, 10)) + ' — متوسط ' + esc(v.avg) + ' من 4</h3><div class="sub">' + esc(v.by) + (v.from || v.to ? ' • الفترة ' + esc(v.from || '…') + ' ← ' + esc(v.to || '…') : '') + '</div>' + (v.metrics && v.metrics.groups != null ? mLine(v.metrics) : '') + '</div>';
+    M.sections.forEach(function (sec) {
+      h += '<div class="panel"><h3>' + esc(sec) + '</h3>' + M.items.filter(function (i) { return i.section === sec; }).map(function (it) { var x = v.scores[it.key] || {};
+        return '<div class="line"><span class="k">' + esc(it.name) + '</span><span class="pill" style="background:' + (VLV_COL[x.v] || '#ccc') + ';color:#fff">' + (x.v === 'NO' ? 'N/O' : esc(x.v || '—')) + ' ' + esc(vLabel(M, x.v)) + '</span>' + (x.n ? '<small> — ' + esc(x.n) + '</small>' : '') + '</div>'; }).join('') + '</div>';
+    });
+    h += '<div class="panel"><h3>⭐ نقاط القوة</h3>' + ul(v.strengths) + '<h3>📈 أولويات التحسين</h3>' + ul(v.improve) + '<h3>⚙️ خطة المتابعة</h3><div>' + esc(v.plan || '—') + '</div>' + (v.notes ? '<h3>📝 ملاحظات</h3><div>' + esc(v.notes) + '</div>' : '') + '</div>';
+    $('cebox').innerHTML = h; $('cebox').scrollIntoView({ behavior: 'smooth' });
+  };
+  if (ST.cmeta) go(ST.cmeta); else call('coordEvalMeta', [ME.code], go, function () { go({ sections: [], items: [], scale: VISIT_SCALE_UI }); });
+}
+var VISIT_SCALE_UI = [[4, 'متميز', ''], [3, 'جيد', ''], [2, 'نام', ''], [1, 'يحتاج إلى دعم', ''], ['NO', 'لم تتم ملاحظته', '']];
+
 // ---------- v5.16: استمارة الزيارة الصفية (للمنسق: متابعة المربي والحلقة) ----------
 var VSEC_COL = { env: ['#e8f5e1', '#5a9e3a'], stu: ['#e3f2fb', '#1f88c9'], coach: ['#fdeedd', '#e07b22'] };
 var VLV_COL = { 4: '#4caf50', 3: '#2196f3', 2: '#f5b400', 1: '#e53935', NO: '#8a96a3' };
@@ -1094,7 +1252,7 @@ function qualityHome() {
     var groups = {};
     d.items.forEach(function (it) { (groups[it.role] = groups[it.role] || []).push(it); });
     var roles = Object.keys(groups);
-    var h = '<div class="panel"><h3>✅ لوحة الجودة</h3><div class="sub">كل حاجة فات ميعادها من غير متابعة. الأقدم فوق.</div><div class="stats">' +
+    var h = qualityTabs('late') + '<div class="panel"><h3>✅ لوحة الجودة</h3><div class="sub">كل حاجة فات ميعادها من غير متابعة. الأقدم فوق.</div><div class="stats">' +
       '<div class="stat"><b>' + d.items.length + '</b><span>بند متأخر</span></div><div class="stat"><b>' + roles.length + '</b><span>أدوار</span></div><div class="stat"><b>' +
       d.items.filter(function (i) { return i.notes.length; }).length + '</b><span>عليها ملاحظة</span></div></div></div>';
     if (d.hiddenSensitive) h += '<div class="panel"><div class="row"><div class="sub" style="margin:0">🔒 فيه ' + d.hiddenSensitive + ' بند من خطط المربين والسلوك والشكاوى مستخبي لحد ما تدخل بحساب Google.</div>' + googleBtn() + '</div></div>';
@@ -1110,7 +1268,8 @@ function qualityHome() {
     $('main').onclick = function (e) {
       var n = e.target.closest('[data-note]');
       if (n) { var t = prompt('ملاحظة الجودة على: ' + n.dataset.t); if (!t) return; call('qualityNote', [ME.code, n.dataset.note, n.dataset.t, t], function () { toast('اتسجلت ✅'); qualityHome(); }); return; }
-      var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], qualityHome); }
+      var c = e.target.closest('[data-case]'); if (c) { var x = c.dataset.case.split('|'); caseView(x[0], x[1], qualityHome); return; }
+      var qt = e.target.closest('[data-qt]'); if (qt && qt.dataset.qt === 'coord') coordBoardView();
     };
   });
 }
