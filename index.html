@@ -219,15 +219,17 @@ function go(v) {
 //                               المربي
 // ======================================================================
 function coachHome() {
-  var cs = ME.classes;
-  main('<div class="panel"><h3>📋 مجموعاتي</h3>' + (cs.length ? cs.map(function (c) {
+  var cs = ME.classes, sb = ME.subs || [];
+  main((sb.length ? '<div class="panel" style="border:2px solid var(--c)"><h3>🔁 حلقات إنت بديل فيها</h3>' + sb.map(function (c) {
+      return '<div class="cls ok" data-cls="' + esc(c.name) + '" data-sub="1" data-n="' + c.session + '"><h4>' + esc(c.name) + ' — حلقة ' + c.session + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.branchName || c.branch || '') +
+        ' • حدده ' + esc(c.by) + (c.reason ? ' • ' + esc(c.reason) : '') + '</div></div>'; }).join('') + '</div>' : '') + '<div class="panel"><h3>📋 مجموعاتي</h3>' + (cs.length ? cs.map(function (c) {
       return '<div class="cls ok" data-cls="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
         (c.hasTerm ? ' • ' + esc(c.term) : ' • <span class="pill wait">مفيش ترم حالي</span>') + '</div></div>';
     }).join('') : '<div class="empty">مفيش مجموعات مسجلة باسمك.</div>') +
     '<button class="btn sec" type="button" id="sub-btn">🔁 أنا مربي بديل النهارده</button> <button class="btn sec" type="button" id="myq-btn">🕌 تقييماتي من قسم القرآن</button> <button class="btn sec" type="button" id="mym-btn">🗓️ حضوري في الاجتماعات</button> <button class="btn ' + (ME.myWarns ? '' : 'sec') + '" type="button" id="myw-btn">⚠️ التنبيهات' + (ME.myWarns ? ' (' + ME.myWarns + ' جديد)' : '') + '</button></div><div id="sub-list"></div><div id="todo"></div>');
   loadTodo();
   $('main').onclick = function (e) {
-    var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, null, c.dataset.sub === '1'); return; }
+    var c = e.target.closest('[data-cls]'); if (c) { Sound.play('tap'); openSession(c.dataset.cls, c.dataset.n ? Number(c.dataset.n) : null, c.dataset.sub === '1'); return; }
     if (e.target.id === 'myq-btn') { myQuranEvals(); return; }
     if (e.target.id === 'mym-btn') { myMeetingsView(); return; }
     if (e.target.id === 'myw-btn') { myWarnsView(); return; }
@@ -235,9 +237,10 @@ function coachHome() {
     if (e.target.id === 'sub-btn') {
       $('sub-list').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
       call('substituteClasses', [ME.code], function (list) {
-        $('sub-list').innerHTML = '<div class="panel"><h3>اختار المجموعة اللي هتغطيها</h3>' + (list.length ? list.map(function (c) {
-          return '<div class="cls" data-cls="' + esc(c.name) + '" data-sub="1"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + '</div></div>'; }).join('')
-          : '<div class="empty">مفيش مجموعات تانية في فرعك.</div>') + '</div>';
+        var draw = function (q) { return list.filter(function (c) { return !q || c.name.indexOf(q) !== -1 || String(c.branch).indexOf(q) !== -1; }).map(function (c) {
+          return '<div class="cls" data-cls="' + esc(c.name) + '" data-sub="1"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + ' • فرع ' + esc(c.branch || '') + '</div></div>'; }).join('') || '<div class="empty">مفيش نتايج.</div>'; };
+        $('sub-list').innerHTML = '<div class="panel"><h3>اختار المجموعة اللي هتغطيها (كل الفروع)</h3><input type="text" id="sub-q" placeholder="دوّر باسم المجموعة أو الفرع"><div id="sub-res">' + draw('') + '</div></div>';
+        $('sub-q').oninput = function () { $('sub-res').innerHTML = draw(this.value.trim()); };
       });
     }
   };
@@ -317,6 +320,7 @@ function studentHTML(st, guest) {
   var h = '<div class="st' + (complete ? ' done' : '') + '" data-st="' + esc(st.code) + '"><div class="st-h"><b>' + esc(st.name) + '</b><span>' +
     (guest ? '<span class="pill wait">زائر — تعويضي</span> ' : '') + (st.pending ? '<span class="pill wait">مستني تأكيد</span> ' : '') + (st.quran ? '<span class="pill c">' + esc(st.quran) + '</span>' : '') + '</span></div>' +
     '<div style="margin-top:4px">' + ageHTML(st) + '</div>';
+  if (!guest && st.madeUp) h += '<div class="info" style="margin:6px 0 0">🔁 عوّض الأسبوع ده مع <b>' + esc(st.madeUp.cls) + '</b> (حلقة ' + st.madeUp.n + (st.madeUp.by ? ' — ' + esc(st.madeUp.by) : '') + '). لو غاب هنا علّمه «غائب» — الغياب هيتحسب معوَّض ومش هيأثر على حضوره.</div>';
   if (!guest) h += '<div class="chips">' + ME.attendance.map(function (a) { return '<button type="button" class="chip' + (row.att === a ? ' on' + (ME.rated.indexOf(a) === -1 ? ' absent' : '') : '') + '" data-act="att" data-s="' + esc(st.code) + '" data-v="' + a + '">' + a + '</button>'; }).join('') + '</div>';
   if (rated || guest) {
     var g = '';
@@ -528,8 +532,9 @@ function followClass(cls) {
         (s.status !== 'منسحب' && !ME.qualityOnly ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
     h += '<div class="panel"><h3>🏫 الزيارات الصفية</h3><div id="vhist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3><div id="whist" class="sub">جاري التحميل…</div></div>';
+    h += '<div class="panel"><h3>🔁 المربي البديل</h3><div id="sbox" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>🗓️ الحلقات المسجلة</h3>' + (done.length ? done.map(function (s) { return '<button class="btn sm sec" type="button" data-a="sess" data-n="' + s.n + '" style="margin:3px">ح' + s.n + '</button>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div><div id="fbox"></div>';
-    main(h); visitHistoryBox(cls); warnBox(cls);
+    main(h); visitHistoryBox(cls); warnBox(cls); subBox(cls);
     var m = $('main');
     m.onclick = function (e) { var b = e.target.closest('[data-a]'); if (!b) return; e.preventDefault(); var a = b.dataset.a;
       if (a === 'back') followHome(FW);
@@ -538,6 +543,9 @@ function followClass(cls) {
       else if (a === 'report') report(b.dataset.c);
       else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel)$/.test(a)) return;
       else if (a === 'wnew') warnForm(cls, b.dataset.c);
+      else if (a === 'sbsave') { var sn = $('sb-n').value, sc = $('sb-c').value; if (!sn || !sc) { toast('اختار الحلقة والمربي'); return; } busy(b, '⏳');
+        call('assignSub', [ME.code, cls, sn, sc, $('sb-r').value], function () { busy(b); Sound.play('ok'); toast('اتحدد البديل ✅'); subBox(cls); }, function (er) { busy(b); failed(er); }); }
+      else if (a === 'sbx') call('cancelSub', [ME.code, b.dataset.id], function () { toast('اتلغى'); subBox(cls); });
       else if (a === 'wcancel') { var why = prompt('سبب إلغاء الإنذار؟'); if (why == null) return; call('cancelWarn', [ME.code, b.dataset.id, why], function () { toast('اتلغى'); warnBox(cls); }); }
       else if (a === 'wsave') saveWarnForm(cls, b);
       else if (a === 'wlv') { [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); }
@@ -604,6 +612,22 @@ function saveWarnForm(cls, b) {
   busy(b, '⏳');
   call('saveWarn', [ME.code, cls, { coach: b.dataset.c, level: lv ? lv.dataset.v : '', reason: $('wreason').value, date: $('wdate').value, details: $('wdet').value }],
     function () { busy(b); Sound.play('ok'); toast('اتسجل ✅'); f.innerHTML = ''; warnBox(cls); }, function (e) { busy(b); failed(e); });
+}
+// v5.20: المربي البديل في صفحة المجموعة
+function subBox(cls) {
+  call('classSubs', [ME.code, cls], function (d) {
+    var el = $('sbox'); if (!el) return;
+    var done = {}; (ST.fc && ST.fc.sessions || []).forEach(function (x) { done[x.n] = x.status; });
+    var h = d.list.length ? d.list.map(function (x) { return '<div class="ur"><span><b>حلقة ' + x.session + ' ← ' + esc(x.coachName) + '</b> <small style="color:var(--m)">' + esc(x.by) + (x.reason ? ' • ' + esc(x.reason) : '') + '</small> ' +
+      (x.done ? '<span class="pill ok">اتسجلت</span>' : '<span class="pill wait">لسه</span>') + '</span>' + (d.canAssign && !x.done ? '<button class="btn ghost" type="button" data-a="sbx" data-id="' + esc(x.id) + '">إلغاء</button>' : '') + '</div>'; }).join('') : '<div class="empty" style="padding:6px">مفيش بديل متحدد.</div>';
+    if (d.canAssign) {
+      var ns = []; for (var i = 1; i <= d.sessions; i++) if (done[i] !== 'done' && done[i] !== 'cancelled' && done[i] !== 'before') ns.push({ v: i, l: 'حلقة ' + i });
+      h += '<div class="row" style="margin-top:8px"><div class="f"><select id="sb-n">' + opts(ns, '', 'الحلقة') + '</select></div><div class="f"><select id="sb-c">' + opts(d.coaches.map(function (x) { return { v: x.code, l: x.name + (x.branch ? ' (' + x.branch + ')' : '') }; }), '', 'المربي البديل (أي فرع)') + '</select></div></div>' +
+        '<div class="f"><input type="text" id="sb-r" placeholder="السبب (اختياري) — زي: إجازة، ظرف"></div><button class="btn sm" type="button" data-a="sbsave">🔁 حدد البديل</button>' +
+        '<div class="sub">البديل هيلاقي الحلقة في «مجموعاتي» ويسجّلها، والحلقة بتتسجل باسمه ومكتوب عليها «بديل».</div>';
+    }
+    el.innerHTML = h;
+  });
 }
 // المربي: تنبيهاتي
 function myWarnsView() {
@@ -815,13 +839,13 @@ function report(code) {
         (g != null ? ' <small style="color:' + (g > 0 ? 'var(--l5)' : g < 0 ? 'var(--l1)' : 'var(--m)') + '">' + (g > 0 ? '▲' : g < 0 ? '▼' : '•') + Math.abs(g) + '</small>' : '') + '</span></div>'; }).join('');
     var a = r.attendance;
     $('fbox').innerHTML = '<div class="panel"><h3>👤 ' + esc(r.student) + ' <small style="color:var(--m);font-weight:normal">— ' + esc(r.cls) + (r.quran ? ' • ' + esc(r.quran) : '') + ' • ' + (r.age ? r.age + ' سنين' + (r.ageEstimated ? ' (تقديري)' : '') : 'السن مش متسجل') + '</small></h3>' +
-      '<div class="stats"><div class="stat"><b>' + (r.attendanceRate == null ? '—' : r.attendanceRate + '%') + '</b><span>الحضور</span></div><div class="stat"><b>' + r.total + '</b><span>حلقات</span></div><div class="stat"><b>' + a['غائب'] + '</b><span>غياب</span></div></div>' +
+      '<div class="stats"><div class="stat"><b>' + (r.attendanceRate == null ? '—' : r.attendanceRate + '%') + '</b><span>الحضور</span></div><div class="stat"><b>' + r.total + '</b><span>حلقات</span></div><div class="stat"><b>' + a['غائب'] + '</b><span>غياب</span></div>' + (r.madeUp ? '<div class="stat"><b>' + r.madeUp + '</b><span>غاب وعوّض</span></div>' : '') + '</div>' +
       '<div class="line">' + Object.keys(a).map(function (k) { return '<span class="pill">' + k + ' ' + a[k] + '</span>'; }).join('') + '</div>' +
       '<h3 style="margin-top:14px">📈 المتوسطات (من 5)</h3>' + bars + '<div class="sub">▲▼ = الفرق بين أول ' + r.minRatings + ' تقييمات وآخر ' + r.minRatings + '. «لم يُلاحظ» مش داخل في المتوسط.</div>' +
       '<div class="line">' + ME.followups.map(function (f) { var x = r.follow[f[0]]; return '<span class="pill">' + f[1] + ': ' + (x.total ? x.done + '/' + x.total : '—') + '</span>'; }).join('') + '</div>' +
       examReportHTML(r.exam) +
       '<h3 style="margin-top:14px">🗓️ آخر الحلقات</h3><div class="tw"><table><thead><tr><th>ح</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      r.sessions.map(function (s) { return '<tr><td>' + s.n + '</td><td>' + esc(s.att) + (s.guestFrom ? '*' : '') + '</td>' + r.criteria.map(function (c) { return '<td>' + sc(s[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      r.sessions.map(function (s) { return '<tr><td>' + s.n + '</td><td>' + esc(s.att) + (s.guestFrom ? '*' : '') + (s.madeUp ? ' <small>(عوّض مع ' + esc(s.madeUp.cls) + ')</small>' : '') + '</td>' + r.criteria.map(function (c) { return '<td>' + sc(s[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
       (r.behavior.length ? '<h3 style="margin-top:14px">⚑ ملاحظات سلوكية</h3>' + r.behavior.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') +
       (r.notes.length ? '<h3 style="margin-top:14px">📝 ملاحظات المربين</h3>' + r.notes.map(function (n) { return '<div class="note">' + esc(n.text) + ' <small>— ح' + esc(n.n) + '، ' + esc(n.coach) + '</small></div>'; }).join('') : '') + '</div>';
     $('fbox').scrollIntoView({ behavior: 'smooth' });
