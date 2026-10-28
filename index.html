@@ -1524,7 +1524,7 @@ function asmtForm(a) {
 // ---------- إدخال الدرجات ----------
 var AR_DIGITS = { '٠': 0, '١': 1, '٢': 2, '٣': 3, '٤': 4, '٥': 5, '٦': 6, '٧': 7, '٨': 8, '٩': 9 };
 function parseGrade(raw, S) {   // «3» أو «3+» (↑) — بيقبل الأرقام العربي
-  var t = String(raw || '').replace(/[٠-٩]/g, function (c) { return AR_DIGITS[c]; }).replace(/\s/g, '');
+  var t = String(raw || '').replace(/[٠-٩]/g, function (c) { return AR_DIGITS[c]; }).replace(/[\s\u2066-\u2069\u200e\u200f]/g, '');
   if (!t) return { empty: true };
   var st = S.step || 1;
   if (st < 1) {   // v5.21: 3.5 / 3,5 / ٣٫٥ / 3½ / 3¼ / 3¾ / ½
@@ -1564,8 +1564,8 @@ function asmtEntry(id, cls, back) {
         d.students.map(function (s) { var r = e.rows[s.code], off = r.att !== 'حاضر';
           return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
             '<select data-ga="' + esc(s.code) + '" style="width:auto;padding:3px;font-size:12px;margin-top:3px"' + dis + '>' + opts(['حاضر', 'غائب', 'لم يُقيَّم'], r.att) + '</select></td>' +
-            doms.map(function (dm) { var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v) + (c.up ? '+' : '') : '';
-              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="numeric" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
+            doms.map(function (dm) { var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v).replace(/[\u2066\u2069]/g, '') + (c.up ? '+' : '') : '';
+              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="numeric" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
             '<tr><td colspan="' + (doms.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
         '</tbody></table></div>' +
         '<details class="scl" style="margin-top:8px"><summary>ⓘ معنى الدرجات</summary>' + a.labels.map(function (t, i) { return '<div><b>' + (a.min + i) + '</b>' + esc(t || '—') + '</div>'; }).join('') +
@@ -1586,7 +1586,8 @@ function asmtEntry(id, cls, back) {
             var cur = r.data[dm.k] || {}, S = dS(a, dm), vals = []; for (var v = S.min; v <= S.max; v++) vals.push(v);
             var nk = s.code + '|' + dm.k, showN = e.notes[nk] || cur.n;
             x += '<div class="crit"><div class="crit-r"><div class="crit-t">' + esc(dm.name) + (dm.w !== '' && dm.w != null ? ' <small style="color:var(--m)">(' + dm.w + ' درجة)</small>' : '') + (dm.desc ? '<br><small style="color:var(--m);font-weight:normal">' + esc(dm.desc) + '</small>' : '') + '</div><div class="lv">' +
-              vals.map(function (v) { return '<button type="button" data-x="sc" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" data-qv="' + v + '" data-v="' + aCol(S, v) + '" class="' + (cur.v != null && Math.floor(cur.v) === v ? 'on' : '') + '"' + (d.canEdit ? '' : ' disabled') + '>' + v + '</button>'; }).join('') + '</div></div>' +
+              vals.map(function (v) { return '<button type="button" data-x="sc" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" data-qv="' + v + '" data-v="' + aCol(S, v) + '" class="' + (cur.v != null && Math.floor(cur.v) === v ? 'on' : '') + '"' + (d.canEdit ? '' : ' disabled') + '>' + v + '</button>'; }).join('') +
+                '<input type="text" dir="ltr" inputmode="decimal" autocomplete="off" data-cv="' + esc(s.code) + '|' + esc(dm.k) + '" value="' + esc(fmtV(cur.v).replace(/[\u2066\u2069]/g, '')) + '" placeholder="اكتب" title="اكتب الرقم' + (S.step < 1 ? ' (زي 3.5 أو 3½)' : '') + '" style="width:58px;padding:6px 2px;text-align:center;font-size:15px;margin-inline-start:4px"' + (d.canEdit ? '' : ' disabled') + '>' + '</div></div>' +
               (S.step < 1 && cur.v != null && Math.floor(cur.v) < S.max ? '<div class="chips" style="margin:4px 0 0">' + [0, 0.25, 0.5, 0.75].filter(function (f) { return Math.abs(f / S.step - Math.round(f / S.step)) < 1e-9; }).map(function (f) {
                 var tv = Math.floor(cur.v) + f; return '<button type="button" class="chip' + (cur.v === tv ? ' on' : '') + '" data-x="fr" data-s="' + esc(s.code) + '" data-k="' + esc(dm.k) + '" data-f="' + f + '"' + (d.canEdit ? '' : ' disabled') + '>' + fmtV(tv) + '</button>'; }).join('') + '</div>' : '') +
               (cur.v != null ? '<div class="desc"><b>' + fmtV(cur.v) + '</b> — ' + esc(rubTxt(dm, cur.v)) + (cur.up ? ' ↑ قريب من «' + esc(aLabel(S, cur.v + 1) || (cur.v + 1)) + '»' : '') + '</div>' : '') +
@@ -1624,6 +1625,13 @@ function asmtEntry(id, cls, back) {
         var gs = $('gs-' + q[0]); if (gs) gs.innerHTML = status(r); }
     };
     mm.onchange = function (ev) { var t = ev.target;
+      if (t.dataset.cv) {   // v5.21: كتابة الرقم في «طالب طالب»
+        var cq = t.dataset.cv.split('|'), ck = cq[1], cg = parseGrade(t.value, dS(a, domOf(ck))), cr = ST.ae.rows[cq[0]];
+        if (cg.bad) { t.classList.add('bad'); Sound.play('err'); toast('الرقم ده مش مسموح في «' + domOf(ck).name + '»'); return; }
+        var co = cr.data[ck] = cr.data[ck] || {};
+        if (cg.empty) { delete co.v; delete co.up; } else { co.v = cg.v; if (cg.up) co.up = 1; else delete co.up; }
+        Sound.play('tap'); draw(); return;
+      }
       if (t.dataset.ga) { var r = ST.ae.rows[t.dataset.ga]; r.att = t.value; var row = t.closest('tr');
         [].forEach.call(row.querySelectorAll('[data-gv]'), function (i) { i.disabled = r.att !== 'حاضر' || !d.canEdit; });
         var gs = $('gs-' + t.dataset.ga); if (gs) gs.innerHTML = status(r); }
