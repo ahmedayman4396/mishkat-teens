@@ -490,11 +490,17 @@ function followHome(off) {
       (off === 0 ? 'الأسبوع الحالي' : off < 0 ? 'قبل ' + (-off) + ' أسبوع' : 'بعد ' + off + ' أسبوع') + '</div><button class="btn sm sec" type="button" data-w="' + (off + 1) + '"' + (off >= 0 ? ' disabled' : '') + '>الأسبوع الجاي ←</button></div></div>' +
       '<div class="stats"><div class="stat"><b>' + done + '/' + sessions.length + '</b><span>حلقات اتسجلت</span></div><div class="stat"><b>' + late + '</b><span>متأخرة / فائتة</span></div><div class="stat"><b>' + (total ? Math.round(present / total * 100) + '%' : '—') + '</b><span>الحضور</span></div></div>';
     if (ME.isCoord) h += '<div class="panel"><button class="btn sec" type="button" data-myev="1">📝 متابعتي وتقييماتي من الجودة</button></div>';
+    h += '<div class="panel" style="padding:8px 12px">' + TIMING_LEGEND + '</div>';
     h += list.length ? list.map(classCardHTML).join('') : '<div class="panel empty">مفيش مجموعات ضمن صلاحياتك.</div>';
     main(h);
     $('main').onclick = function (e) { if (e.target.closest('[data-myev]')) { coordDetailView(ME.userCode); return; } var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
   });
 }
+// v5.21.2: لون الحلقة = توقيت التسجيل (أخضر في ميعاده • برتقاني متأخر • أحمر فائت) — المهام ليها علامة 📋⏳ لوحدها
+function timingCls(t) { return t === 'في ميعاده' ? 'ok' : t === 'فائت' ? 'no' : 'wait'; }
+var TIMING_LEGEND = '<div class="sub" style="margin:6px 0 0">ألوان الحلقات: <span class="pill ok">اتسجلت في ميعادها</span> <span class="pill wait">اتسجلت متأخر</span> <span class="pill no">اتسجلت بعد ما الميعاد فات خالص</span> <span class="pill no">⏳ لسه ما اتسجلتش</span> • <b>📋⏳</b> = فيه مهمة لسه «لم يتم»</div>';
+function taskCell(x) { if (!x || !x.v) return '<td>—</td>'; if (x.v === 'لم يتم') return '<td><span class="pill wait">⏳</span></td>';
+  return '<td><span class="pill ok">✓</span>' + (x.at ? '<br><small style="color:var(--m)">اتأكدت ' + esc(x.at) + '</small>' : '') + '</td>'; }
 function classCardHTML(c) {
   if (c.noTerm) return '<div class="cls" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • <span class="pill wait">مفيش ترم حالي</span></div></div>';
   c.sessions = (c.sessions || []).filter(function (s) { return s.status !== 'before'; });
@@ -505,7 +511,8 @@ function classCardHTML(c) {
   return '<div class="cls ' + cls + '" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + ' • أسبوع ' + c.week + ' • 👤 ' + esc(c.coaches.join(' • ') || '—') + '</div>' +
     '<div class="line"><span class="k">الحلقات</span>' + (c.sessions.length ? c.sessions.map(function (s) {
       if (s.status === 'cancelled') return '<span class="pill">🚫 ح' + s.n + '</span>';
-      if (s.log) return '<span class="pill ' + (s.log.timing === 'في ميعاده' ? 'ok' : 'wait') + '">✓ ح' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + '</span>';
+      if (s.log) { var tp = ME.tasks.filter(function (t) { return s.log.tasks[t[0]] === 'لم يتم'; });
+        return '<span class="pill ' + timingCls(s.log.timing) + '" title="' + esc('اتسجلت ' + (s.log.timing || '') + (tp.length ? ' — لسه «لم يتم»: ' + tp.map(function (t) { return t[1]; }).join('، ') : ' — المهام كلها تم')) + '">✓ ح' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + (tp.length ? ' 📋⏳' : '') + '</span>'; }
       return '<span class="pill ' + (s.status === 'open' ? 'no' : '') + '">' + (s.status === 'open' ? '⏳' : '…') + ' ح' + s.n + '</span>'; }).join('') : '—') + '</div>' +
     (tasksPend ? '<div class="line"><span class="k">المهام</span><span class="pill wait">في مهام لسه «لم يتم»</span></div>' : '') +
     (c.pending ? '<div class="line"><span class="k">طلاب</span><span class="pill wait">' + c.pending + ' مستني تأكيد</span></div>' : '') +
@@ -530,6 +537,11 @@ function followClass(cls) {
         ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center">' +
         '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
         (s.status !== 'منسحب' && !ME.qualityOnly ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
+    var tl = d.tasksLog || [];
+    h += '<div class="panel"><h3>✅ مهام الحلقات</h3>' + (tl.length ? '<div class="tw"><table style="font-size:13px"><thead><tr><th>الحلقة</th><th>التسجيل</th>' + ME.tasks.map(function (t) { return '<th>' + esc(t[1]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      tl.map(function (x) { return '<tr><td>ح' + x.n + '<br><small style="color:var(--m)">' + esc(x.date) + '</small></td><td><span class="pill ' + timingCls(x.timing) + '">' + esc(x.timing || '—') + '</span><br><small style="color:var(--m)">' + esc(x.coach) + (x.mode === 'بديل' ? ' (بديل)' : '') + '</small></td>' +
+        ME.tasks.map(function (t) { return taskCell(x.tasks[t[0]]); }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="sub">✓ = تم يوم الحلقة • ✓ اتأكدت = المربي سجّلها «لم يتم» وأكّدها بعدين في التاريخ ده • ⏳ = لسه «لم يتم»</div>' : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>';
     h += '<div class="panel"><h3>🏫 الزيارات الصفية</h3><div id="vhist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3><div id="whist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>🔁 المربي البديل</h3><div id="sbox" class="sub">جاري التحميل…</div></div>';
@@ -569,7 +581,9 @@ function followSession(cls, n) {
   $('fbox').innerHTML = '<div class="panel loading">جاري التحميل…</div>';
   call('followSession', [ME.code, cls, n], function (d) {
     ST.fs = d; var sv = d.saved;
-    $('fbox').innerHTML = '<div class="panel"><h3>حلقة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • ' + esc(sv.timing) + '</h3><div class="sub">اضغط على أي درجة علشان تصححها (التعديل بيتسجل).</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
+    $('fbox').innerHTML = '<div class="panel"><h3>حلقة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • <span class="pill ' + timingCls(sv.timing) + '">' + esc(sv.timing) + '</span></h3>' +
+      (d.tasksLog ? '<div class="line"><span class="k">المهام</span>' + ME.tasks.map(function (t) { var x = d.tasksLog.tasks[t[0]] || {}; return '<span class="pill ' + (x.v === 'تم' ? 'ok' : 'wait') + '">' + (x.v === 'تم' ? '✓ ' : '⏳ ') + esc(t[1]) + (x.at ? ' (اتأكدت ' + esc(x.at) + ')' : '') + '</span>'; }).join('') + '</div>' : '') +
+      '<div class="sub">' + (ME.qualityOnly ? '' : 'اضغط على أي درجة علشان تصححها (التعديل بيتسجل).') + '</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
       d.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' + sv.students.map(function (s) {
         return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(s.att) + '</td>' + d.criteria.map(function (c) {
           return '<td' + (ME.qualityOnly ? '' : ' class="ed" data-a="cell"') + ' data-st="' + esc(s.code) + '" data-k="' + c.key + '" data-n="' + n + '">' + sc(s.scores[c.key]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
