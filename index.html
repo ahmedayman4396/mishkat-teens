@@ -1345,6 +1345,11 @@ function aLabel(a, v) { return (a.labels || [])[Math.floor(v) - a.min] || ''; }
 // v5.11: القرآن الأول وبعده المحتوى (زي تقييم الحلقة)
 function asmtOrdered(a) { if (a.domains.some(function (d) { return d.sec; })) return a.domains.slice();   // v5.18: الأجزاء بترتيبها
   return a.domains.filter(function (d) { return d.g === 'quran'; }).concat(a.domains.filter(function (d) { return d.g !== 'quran'; })); }
+// v5.22: البند لمستوى قرآن معيّن (d.ql) — فاضي = للكل
+function dFor(d, ql) { return !d.ql || d.ql === ql; }
+function aFor(a, ql) { var o = {}; for (var k in a) o[k] = a[k]; o.domains = a.domains.filter(function (d) { return dFor(d, ql); }); return o; }
+function aMaxTxt(a) { var qls = []; a.domains.forEach(function (d) { if (d.ql && qls.indexOf(d.ql) === -1) qls.push(d.ql); });
+  return qls.length ? qls.map(function (q) { return q + ' ' + aPts(aFor(a, q), {}).max; }).join(' / ') : aPts(a, {}).max; }
 function dTitle(d) { return (d.sec ? d.sec + ': ' : '') + d.name; }
 function aHasPts(a) { return a.domains.some(function (d) { return d.w !== '' && d.w != null; }); }
 // v5.18: درجة الطالب بالدرجات (لو البنود ليها درجات)
@@ -1401,13 +1406,14 @@ function asmtForm(a) {
     var item = function (d) { d = d || {}; var own = d.min !== '' && d.min != null && d.max !== '' && d.max != null;
       return { k: d.k || '', name: d.name || '', desc: d.desc || '', w: d.w == null ? '' : d.w, rub: (d.rub || []).slice(), tpl: d.tpl || '', step: d.step === 0.5 || d.step === 0.25 ? d.step : 1,
                own: own, min: own ? d.min : '', max: own ? d.max : '', labels: own ? (d.labels || []).slice() : [] }; };
-    var secs = [];
+    var secs = [], QL = [];
     if (a) {
       var hasSec = a.domains.some(function (d) { return d.sec; });
       a.domains.forEach(function (d) {
         var nm = hasSec ? (d.sec || '') : (d.g === 'quran' ? 'القرآن' : 'المحتوى'), g = d.g === 'quran' ? 'quran' : 'content';
-        var sc = secs.filter(function (z) { return z.name === nm && z.g === g; })[0];
-        if (!sc) { sc = { name: nm, g: g, items: [] }; secs.push(sc); }
+        var ql = g === 'quran' ? (d.ql || '') : '';
+        var sc = secs.filter(function (z) { return z.name === nm && z.g === g && z.ql === ql; })[0];
+        if (!sc) { sc = { name: nm, g: g, ql: ql, items: [] }; secs.push(sc); }
         sc.items.push(item(d));
       });
     }
@@ -1425,10 +1431,13 @@ function asmtForm(a) {
       var all = [], pts = 0, anyW = false;
       x.secs.forEach(function (sc) { sc.items.forEach(function (d) { if (!d.name.trim()) return; all.push(d); if (d.w !== '' && d.w != null) { anyW = true; pts += Number(d.w) || 0; } else pts += 1; }); });
       var q = 0; x.secs.forEach(function (sc) { if (sc.g === 'quran') q += sc.items.filter(function (d) { return d.name.trim(); }).length; });
-      return x.secs.length + ' جزء • ' + all.length + ' بند' + (q ? ' (' + q + ' قرآن)' : '') + (anyW ? ' • الدرجة النهائية ' + pts : ' • من غير درجات (البنود متساوية)');
+      var qls = []; x.secs.forEach(function (sc) { if (sc.g === 'quran' && sc.ql && qls.indexOf(sc.ql) === -1) qls.push(sc.ql); });
+      var per = qls.map(function (ql) { var t = 0; x.secs.forEach(function (sc) { if (sc.g === 'quran' && sc.ql && sc.ql !== ql) return; sc.items.forEach(function (d) { if (d.name.trim()) t += d.w !== '' && d.w != null ? Number(d.w) || 0 : 1; }); }); return ql + ': ' + t; }).join(' / ');
+      return x.secs.length + ' جزء • ' + all.length + ' بند' + (q ? ' (' + q + ' قرآن)' : '') + (anyW ? (qls.length ? ' • الدرجة النهائية — ' + per : ' • الدرجة النهائية ' + pts) : ' • من غير درجات (البنود متساوية)');
     };
     var draw = function () {
       var p = m.programs.filter(function (q) { return q.code === x.program; })[0] || m.programs[0] || { levels: [], classes: [] }, n = nLv();
+      QL = p.quranLevels || [];
       var chk = function (list, sel, attr) { return '<div class="chk">' + list.map(function (v) { var on = sel.indexOf(v) !== -1; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" data-' + attr + '="' + esc(v) + '"' + (on ? ' checked' : '') + '>' + esc(v) + '</label>'; }).join('') + '</div>'; };
       var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>' + (x.id ? '✏️ تعديل التقييم' : '➕ تقييم جديد') + '</h3>' +
         '<div class="f"><label class="lb">اسم التقييم:</label><input type="text" id="af-name" value="' + esc(x.name) + '" placeholder="مثلًا: تقييم منتصف الترم – تينز – Discover (الحلقة 7)"></div>' +
@@ -1453,7 +1462,10 @@ function asmtForm(a) {
           '<input type="text" data-sname="' + si + '" value="' + esc(sc.name) + '" placeholder="اسم الجزء (زي: السؤال الأول — سورة النبأ)" style="flex:3">' +
           '<button class="btn ghost" type="button" data-sx="' + si + '" style="flex:0 0 auto" title="شيل الجزء">✕</button></div>' +
           '<div class="chips" style="margin-top:6px"><button type="button" class="chip' + (sc.g === 'content' ? ' on' : '') + '" data-sg="' + si + '" data-v="content">💡 محتوى</button><button type="button" class="chip' + (sc.g === 'quran' ? ' on' : '') + '" data-sg="' + si + '" data-v="quran">📖 قرآن</button>' +
-          (spts ? '<span class="pill c" style="margin-inline-start:auto">' + spts + ' درجة</span>' : '') + '</div>';
+          (spts ? '<span class="pill c" style="margin-inline-start:auto">' + spts + ' درجة</span>' : '') + '</div>' +
+          (sc.g === 'quran' && (QL.length || sc.ql) ? '<div class="row" style="margin-top:6px;align-items:center"><label class="lb" style="flex:0 0 auto;margin:0">لمستوى القرآن:</label><select data-sql="' + si + '" style="flex:1">' +
+            opts([{ v: '', l: 'الكل' }].concat(QL.concat(sc.ql && QL.indexOf(sc.ql) === -1 ? [sc.ql] : []).map(function (q) { return { v: q, l: q }; })), sc.ql || '') + '</select></div>' +
+            (sc.ql ? '<div class="sub" style="margin:2px 0 0">الجزء ده هيظهر بس للأطفال اللي مستواهم «' + esc(sc.ql) + '»، ودرجتهم بتتحسب من أسئلة مستواهم بس.</div>' : '') : '');
         sc.items.forEach(function (d, ii) {
           var ref = si + '.' + ii, lv = lvOf(d), mn = minOf(d), t = tplOf(d.tpl), rub = fit(d.rub, lv), filled = rub.filter(function (z) { return String(z).trim(); }).length;
           var labs = d.own ? fit(d.labels, lv) : fit(x.labels, lv);
@@ -1499,6 +1511,7 @@ function asmtForm(a) {
       else if (ds.omin != null || ds.omax != null) { d = itemAt(ds.omin != null ? ds.omin : ds.omax); d[ds.omin != null ? 'min' : 'max'] = t.value; var lv = lvOf(d);
         d.labels = SN[lv] && !d.labels.some(String) ? SN[lv].slice() : fit(d.labels, lv); if (d.tpl) applyTpl(d); else d.rub = fit(d.rub, lv); redraw(); }
       else if (ds.tp != null) { d = itemAt(ds.tp); d.tpl = t.value; if (t.value) { if (lvOf(d) === 4 || lvOf(d) === 5) applyTpl(d); else toast('القوالب للسلّم من 4 أو 5 درجات بس'); } redraw(); }
+      else if (ds.sql != null) { x.secs[Number(ds.sql)].ql = t.value; redraw(); }
       else if (ds.lv != null || ds.cl != null) { var arr = ds.lv != null ? x.levels : x.classes, v = ds.lv != null ? ds.lv : ds.cl, i = arr.indexOf(v); if (t.checked && i === -1) arr.push(v); if (!t.checked && i !== -1) arr.splice(i, 1); redraw(); }
     };
     mm.onclick = function (e) {
@@ -1506,7 +1519,7 @@ function asmtForm(a) {
       if (e.target.closest('[data-b]')) { asmtHome(); return; }
       if ((b = e.target.closest('[data-dm]'))) { x.dueMode = b.dataset.dm; redraw(); return; }
       if (e.target.closest('[data-sn]')) { x.labels = (SN[nLv()] || []).slice(); redraw(); return; }
-      if ((b = e.target.closest('[data-sadd]'))) { var g = b.dataset.sadd; x.secs.push({ name: '', g: g, items: [item()] }); redraw(); return; }
+      if ((b = e.target.closest('[data-sadd]'))) { var g = b.dataset.sadd; x.secs.push({ name: '', g: g, ql: '', items: [item()] }); redraw(); return; }
       if ((b = e.target.closest('[data-sx]'))) { var si = Number(b.dataset.sx); if (x.secs[si].items.some(function (z) { return z.k; }) && !confirm('تشيل الجزء ده بكل بنوده؟')) return;
         x.secs.splice(si, 1); if (!x.secs.length) x.secs.push({ name: 'المحتوى', g: 'content', items: [item()] }); redraw(); return; }
       if ((b = e.target.closest('[data-sg]'))) { x.secs[Number(b.dataset.sg)].g = b.dataset.v; redraw(); return; }
@@ -1523,7 +1536,7 @@ function asmtForm(a) {
       if (e.target.id === 'af-save') {
         var doms = [];
         x.secs.forEach(function (sc) { sc.items.forEach(function (z) { if (!z.name.trim()) return; var lv = lvOf(z);
-          var o = { k: z.k, name: z.name, desc: z.desc, w: z.w, g: sc.g, step: z.step, sec: x.secs.length > 1 || sc.name.trim() && sc.name !== 'المحتوى' && sc.name !== 'القرآن' ? sc.name.trim() : '', rub: fit(z.rub, lv), tpl: z.tpl };
+          var o = { k: z.k, name: z.name, desc: z.desc, w: z.w, g: sc.g, ql: sc.g === 'quran' ? sc.ql || '' : '', step: z.step, sec: x.secs.length > 1 || sc.name.trim() && sc.name !== 'المحتوى' && sc.name !== 'القرآن' ? sc.name.trim() : '', rub: fit(z.rub, lv), tpl: z.tpl };
           if (z.own) { o.min = z.min; o.max = z.max; o.labels = fit(z.labels, lv); }
           doms.push(o); }); });
         if (x.secs.length > 1 && x.secs.some(function (sc) { return !sc.name.trim() && sc.items.some(function (z) { return z.name.trim(); }); })) { Sound.play('err'); toast('اكتب اسم لكل جزء'); return; }
@@ -1557,28 +1570,31 @@ function asmtEntry(id, cls, back) {
   call('asmtGet', [ME.code, id, cls], function (d) {
     var a = d.a, rows = {};
     d.students.forEach(function (s) { var sv = d.saved[s.code], dt = sv ? JSON.parse(JSON.stringify(sv.data)) : {}, note = dt._n || ''; delete dt._n;
-      rows[s.code] = { att: sv ? sv.att : 'حاضر', data: dt, note: note }; });
+      rows[s.code] = { att: sv ? sv.att : 'حاضر', data: dt, note: note, ql: s.quran || '' }; });
     var mode = 'grid'; try { mode = localStorage.getItem('mk_ae_mode') || 'grid'; } catch (e0) {}
     ST.ae = { d: d, rows: rows, open: null, notes: {}, mode: mode };
     var doms = asmtOrdered(a);
     var rubTxt = function (dm, v) { var S = dS(a, dm), r = (dm.rub || [])[Math.floor(v) - S.min]; return (aLabel(S, v) || '') + (r ? ' — ' + r : ''); };
     var status = function (r) {
       if (r.att !== 'حاضر') return '<span class="pill wait">' + esc(r.att) + '</span>';
-      var n = a.domains.filter(function (dm) { return r.data[dm.k] && r.data[dm.k].v != null; }).length;
-      var pt = aHasPts(a) && n ? ' <span class="pill c">' + aPts(a, r.data).got + ' من ' + aPts(a, r.data).max + '</span>' : '';
-      return (n === a.domains.length ? '<span class="pill ok">مكتمل</span>' : (n ? '<span class="pill wait">ناقص ' + (a.domains.length - n) + '</span>' : '<span class="pill">لسه</span>')) + pt;
+      var sa = aFor(a, r.ql), n = sa.domains.filter(function (dm) { return r.data[dm.k] && r.data[dm.k].v != null; }).length;
+      var pt = aHasPts(sa) && n ? ' <span class="pill c">' + aPts(sa, r.data).got + ' من ' + aPts(sa, r.data).max + '</span>' : '';
+      return (n === sa.domains.length ? '<span class="pill ok">مكتمل</span>' : (n ? '<span class="pill wait">ناقص ' + (sa.domains.length - n) + '</span>' : '<span class="pill">لسه</span>')) + pt;
     };
+    var hasQL = a.domains.some(function (z) { return z.ql; });
+    var qlPill = function (s) { return !hasQL ? '' : s.quran ? ' <span class="pill c">📖 ' + esc(s.quran) + '</span>' : ' <span class="pill wait">سجّل مستوى القرآن</span>'; };
     var gridHTML = function () {
       var e = ST.ae, dis = d.canEdit ? '' : ' disabled';
       var withSec = doms.some(function (z) { return z.sec; }) || doms.some(function (z) { return z.g === 'quran'; }) && doms.some(function (z) { return z.g !== 'quran'; });
       return '<div class="panel"><div class="sub" style="margin:0 0 6px">اكتب الرقم من الكشف • <b>3+</b> = 3 وقريب من اللي بعده (↑) • Tab للخانة اللي بعدها</div><div class="tw"><table style="font-size:13px;table-layout:fixed"><thead>' +
         (withSec ? '<tr><th style="border-bottom:none"></th>' + secGroups(doms).map(function (gp) { return '<th colspan="' + gp.n + '" style="font-size:11.5px;white-space:normal;line-height:1.2;color:' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + ';border-bottom:2px solid ' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + '">' + esc(gp.key) + '</th>'; }).join('') + '</tr>' : '') +
         '<tr><th style="text-align:right;width:34%">الطالب</th>' +
-        doms.map(function (dm) { var S = dS(a, dm); return '<th title="' + esc(dm.desc || '') + '" style="white-space:normal;font-size:11.5px;line-height:1.2">' + esc(dm.name) + '<br><small style="color:var(--m);font-weight:normal">' + S.min + '–' + S.max + (S.step < 1 ? ' (' + (S.step === 0.5 ? '½' : '¼') + ')' : '') + (dm.w !== '' && dm.w != null ? ' • ' + dm.w + 'د' : '') + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
+        doms.map(function (dm) { var S = dS(a, dm); return '<th title="' + esc(dm.desc || '') + '" style="white-space:normal;font-size:11.5px;line-height:1.2">' + esc(dm.name) + '<br><small style="color:var(--m);font-weight:normal">' + S.min + '–' + S.max + (S.step < 1 ? ' (' + (S.step === 0.5 ? '½' : '¼') + ')' : '') + (dm.w !== '' && dm.w != null ? ' • ' + dm.w + 'د' : '') + (dm.ql ? '<br>📖 ' + esc(dm.ql) : '') + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
         d.students.map(function (s) { var r = e.rows[s.code], off = r.att !== 'حاضر';
-          return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
+          return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + qlPill(s) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
             '<select data-ga="' + esc(s.code) + '" style="width:auto;padding:3px;font-size:12px;margin-top:3px"' + dis + '>' + opts(['حاضر', 'غائب', 'لم يُقيَّم'], r.att) + '</select></td>' +
-            doms.map(function (dm) { var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v).replace(/[\u2066\u2069]/g, '') + (c.up ? '+' : '') : '';
+            doms.map(function (dm) { if (!dFor(dm, r.ql)) return '<td style="border-bottom:none;padding-bottom:0;color:var(--m);text-align:center" title="مش لمستوى القرآن بتاعه">—</td>';
+              var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v).replace(/[\u2066\u2069]/g, '') + (c.up ? '+' : '') : '';
               return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="numeric" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
             '<tr><td colspan="' + (doms.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
         '</tbody></table></div>' +
@@ -1590,11 +1606,12 @@ function asmtEntry(id, cls, back) {
       var e = ST.ae;
       return '<div class="panel">' + d.students.map(function (s) {
         var r = e.rows[s.code], open = e.open === s.code;
-        var x = '<div class="st-h" data-x="open" data-s="' + esc(s.code) + '" style="cursor:pointer"><b>' + (open ? '▾ ' : '▸ ') + esc(s.name) + '</b><span>' + status(r) + '</span></div>';
+        var x = '<div class="st-h" data-x="open" data-s="' + esc(s.code) + '" style="cursor:pointer"><b>' + (open ? '▾ ' : '▸ ') + esc(s.name) + '</b><span>' + qlPill(s) + ' ' + status(r) + '</span></div>';
         if (open) {
           x += '<div class="chips">' + ['حاضر', 'غائب', 'لم يُقيَّم'].map(function (t) { return '<button type="button" class="chip' + (r.att === t ? ' on' + (t !== 'حاضر' ? ' absent' : '') : '') + '" data-x="att" data-s="' + esc(s.code) + '" data-v="' + t + '"' + (d.canEdit ? '' : ' disabled') + '>' + t + '</button>'; }).join('') + '</div>';
           var lastG = '', hasQ = doms.some(function (z) { return z.g === 'quran'; }), hasS = doms.some(function (z) { return z.sec; });
           if (r.att === 'حاضر') doms.forEach(function (dm) {
+            if (!dFor(dm, r.ql)) return;   // v5.22: أسئلة مستوى قرآن تاني
             var gk = hasS ? (dm.sec || '') + '|' + dm.g : dm.g;
             if ((hasQ || hasS) && gk !== lastG) { lastG = gk; x += '<div class="grp">' + (dm.g === 'quran' ? '📖 ' : '💡 ') + esc(hasS && dm.sec ? dm.sec : (dm.g === 'quran' ? 'القرآن' : 'المحتوى')) + '</div>'; }
             var cur = r.data[dm.k] || {}, S = dS(a, dm), vals = []; for (var v = S.min; v <= S.max; v++) vals.push(v);
@@ -1615,7 +1632,7 @@ function asmtEntry(id, cls, back) {
       }).join('') + '</div>';
     };
     var draw = function () {
-      var e = ST.ae, h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📝 ' + esc(a.name) + '</h3><div class="sub">' + esc(d.cls) + (a.domains.some(function (z) { return dS(a, z).own; }) ? ' • كل بند بسلّمه (مكتوب تحت اسمه)' : ' • السلّم ' + a.min + '–' + a.max) + (aHasPts(a) ? ' • الدرجة النهائية ' + aPts(a, {}).max : '') +
+      var e = ST.ae, h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📝 ' + esc(a.name) + '</h3><div class="sub">' + esc(d.cls) + (a.domains.some(function (z) { return dS(a, z).own; }) ? ' • كل بند بسلّمه (مكتوب تحت اسمه)' : ' • السلّم ' + a.min + '–' + a.max) + (aHasPts(a) ? ' • الدرجة النهائية ' + aMaxTxt(a) : '') +
         (d.due ? ' • ⏰ التسليم ' + esc(d.due) : '') + '</div>' +
         (d.submitted ? '<div class="sub">✅ اتسلّم (' + esc(d.submitted.by) + ' ' + esc(d.submitted.time) + ') — تقدر تعدّل لو محتاج.</div>' : (d.late ? '<div class="sub" style="color:var(--bad)">⏳ موعد التسليم فات</div>' : '')) +
         '<div class="sub">«↑» علامة بس ومش داخلة في الحساب. «غائب» و«لم يُقيَّم» مش بيتحسبوا صفر.</div>' +
@@ -1690,7 +1707,7 @@ function asmtReportView(id) {
   loading();
   call('asmtReport', [ME.code, id], function (d) {
     var a = d.a, others = (ST.ah && ST.ah.list || []).filter(function (x) { return x.id !== a.id && x.program === a.programName; });
-    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📊 ' + esc(a.name) + '</h3><div class="sub">' + esc(a.programName) + ' • ' + esc(a.kind) + (aHasPts(a) ? ' • الدرجة النهائية ' + aPts(a, {}).max : ' • السلّم ' + a.min + '–' + a.max) +
+    var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📊 ' + esc(a.name) + '</h3><div class="sub">' + esc(a.programName) + ' • ' + esc(a.kind) + (aHasPts(a) ? ' • الدرجة النهائية ' + aMaxTxt(a) : ' • السلّم ' + a.min + '–' + a.max) +
       (a.due ? ' • التسليم ' + esc(a.due) : '') + '</div><div class="sub">للمتابعة الداخلية بس — مش بتظهر للأهل، ومفيش ترتيب للطلاب.</div></div>';
     h += '<div class="panel"><h3>📬 التسليم</h3>' + d.classes.map(function (c) {
       return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + esc(c.coach) + ' • ' + c.done + ' / ' + c.roster + (c.due ? ' • لحد ' + esc(c.due) : '') + '</small></span><span>' +
