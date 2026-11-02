@@ -2311,7 +2311,7 @@ function certDrawTable(d, s, kind) {
     if (ex.length) { x.textAlign = 'center'; fit(ex.join('   •   '), 32, 700, W - 260); x.fillStyle = th.ink; x.fillText(ex.join('   •   '), W / 2, by); by += 48; }
     if (note) { x.textAlign = 'center'; fit(note, 32, 700, W - 300); x.fillStyle = th.title; x.fillText(note, W / 2, by); by += 48; }
     // مفتاح التقدير
-    var bd = d.bands || [90, 80, 70], keys = [['A', bd[0] + '–100%'], ['B', bd[1] + '–' + (bd[0] - 1) + '%'], ['C', bd[2] + '–' + (bd[1] - 1) + '%'], ['D', '0–' + (bd[2] - 1) + '%'], ['N', 'غياب']];
+    var bd = d.bands || [90, 80, 70], keys = [['A', bd[0] + '–100%'], ['B', bd[1] + '–' + (bd[0] - 1) + '%'], ['C', bd[2] + '–' + (bd[1] - 1) + '%'], ['D', '0–' + (bd[2] - 1) + '%'], ['N', '—']];
     x.font = '400 26px ' + CERT_FONT; var kw = keys.map(function (k) { x.font = '900 26px ' + CERT_FONT; var a1 = x.measureText(k[0] + ' ').width; x.font = '400 26px ' + CERT_FONT; return a1 + x.measureText(k[1]).width; });
     var kgap = 60, ktot = kw.reduce(function (a2, b2) { return a2 + b2; }, 0) + kgap * (keys.length - 1), kx = (W + ktot) / 2;
     keys.forEach(function (k, i) { x.textAlign = 'right'; x.direction = 'rtl'; x.font = '900 26px ' + CERT_FONT; x.fillStyle = CERT_GCOL[k[0]]; x.fillText(k[0], kx, H - 40);
@@ -2377,7 +2377,7 @@ function certHome() {
   call('certClasses', [ME.code], function (list) {
     var by = {}; list.forEach(function (c) { (by[c.program] = by[c.program] || []).push(c); });
     var admin = (ME.roles || []).indexOf('أدمن') !== -1;
-    var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد وشهادة الفاينال (بجدول القرآن وجدول المحتوى)، والشهادة الختامية للترم (من الميد والفاينال). التقدير بالحروف: A من 90% • B من 80% • C من 70% • D أقل • N غياب.</div>' +
+    var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد وشهادة الفاينال (بجدول القرآن وجدول المحتوى)، والشهادة الختامية للترم (من الميد والفاينال). التقدير بالحروف: A من 90% • B من 80% • C من 70% • D أقل • N مفيش درجة. اللي غاب عن الامتحان كله ما بتطلعلوش شهادة لحد ما يمتحن (المربي يسجّله في نفس التقييم بعدين).</div>' +
       (admin ? '<div class="row" style="margin-top:8px"><button class="btn sec" type="button" data-tp="teens">✏️ تصميم شهادة Teens</button><button class="btn sec" type="button" data-tp="dar">✏️ تصميم شهادة الدار</button></div>' : '') + '</div>';
     h += Object.keys(by).length ? Object.keys(by).map(function (p) {
       return '<div class="panel"><h3>' + esc(p) + '</h3>' + by[p].map(function (c) {
@@ -2465,13 +2465,13 @@ function certClass(cls) {
         '<div class="chips">' + Object.keys(CERT_KINDS).map(function (k) { return '<button type="button" class="chip' + (k === kind ? ' on' : '') + '" data-ck="' + k + '">' + CERT_KINDS[k].short + '</button>'; }).join('') + '</div>' +
         '<div class="sub">المنهج من: ' + esc(kind === 'all' ? [d.sources.mid, d.sources.final].filter(String).join(' + ') || '—' : d.sources[kind] || '— (لسه مفيش تقييم ' + (kind === 'mid' ? 'منتصف' : 'نهائي') + ')') +
           ' • القرآن من اختبار ' + (kind === 'mid' ? 'الميد' : kind === 'final' ? 'الفاينال' : 'الميد والفاينال') + '</div>' +
-        '<div class="sub">التقدير: A من ' + d.bands[0] + '% • B من ' + d.bands[1] + '% • C من ' + d.bands[2] + '% • D أقل • N غياب</div>' +
+        '<div class="sub">التقدير: A من ' + d.bands[0] + '% • B من ' + d.bands[1] + '% • C من ' + d.bands[2] + '% • D أقل • N مفيش درجة</div>' +
         '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button></div>';
       h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th>' + fs.map(function (f) { return '<th>' + esc(f.label) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
         d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
           return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(g.quran || '—') + '</td><td>' + esc(g.content || '—') + '</td><td><b>' + esc(g.overall || '—') + '</b></td>' +
             fs.map(function (f) { return '<td><input type="text" data-xv="' + esc(s.code) + '|' + esc(f.key) + '" value="' + esc(val(s, f.key)) + '" list="cert-gr" style="min-width:90px;padding:6px"></td>'; }).join('') +
-            '<td style="white-space:nowrap">' + (okk ? '<button class="btn sm ghost" type="button" data-pv="' + i + '" style="width:auto">👁️</button> <button class="btn sm" type="button" data-dl="' + i + '" style="width:auto">⬇️ PDF</button>' : '<small>لسه</small>') + '</td></tr>'; }).join('') +
+            '<td style="white-space:nowrap">' + (okk ? '<button class="btn sm ghost" type="button" data-pv="' + i + '" style="width:auto">👁️</button> <button class="btn sm" type="button" data-dl="' + i + '" style="width:auto">⬇️ PDF</button>' : '<small>' + (g && g.none ? 'غاب — مالوش شهادة لحد ما يمتحن' : 'لسه') + '</small>') + '</td></tr>'; }).join('') +
         '</tbody></table></div>' + (fs.length ? '<datalist id="cert-gr"><option value="A"><option value="B"><option value="C"><option value="D"></datalist><button class="btn sec" type="button" id="xv-save" style="margin-top:8px">💾 حفظ الخانات (' + fs.map(function (f) { return f.label; }).join('، ') + ')</button>' : '') +
         '</div><div id="cert-pv"></div>';
       main(h);
