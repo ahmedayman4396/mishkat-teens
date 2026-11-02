@@ -107,7 +107,7 @@ input.bad{border-color:var(--bad)!important;background:#fdecea!important}
 var API_URL = 'https://script.google.com/macros/s/AKfycbxMaU2MpXEFYy2rHQOLLWH_9wAHpfthVP5zTXWCN6QgVHxBD-50BVQ3KeydDspvrzGorw/exec';
 var LOGOS = { teens: 'logo-teens.svg', dar: 'logo-dar.svg' };
 var ME = null, VIEW = '', ST = {};
-var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', asmt: '📝 التقييمات', meet: '🗓️ حضور المربين', cert: '📜 الشهادات', quran: '📖 القرآن', acad: '🎓 الأكاديمي', quality: '✅ الجودة', board: '📈 تقدّم الأطفال', admin: '⚙️ الأدمن' };
+var VIEWS = { coach: '📋 مجموعاتي', follow: '📊 المتابعة', asmt: '📝 التقييمات', meet: '👤 المربين', complaints: '📞 الشكاوى', qplans: '📗 خطط القرآن', cert: '📜 الشهادات', quran: '📖 القرآن', acad: '🎓 الأكاديمي', quality: '✅ الجودة', board: '📈 تقدّم الأطفال', admin: '⚙️ الأدمن' };
 
 // ---------- أصوات ----------
 var Sound = { ctx: null, on: true,
@@ -213,6 +213,7 @@ function go(v) {
   [].forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.v === v); });
   if (v === 'coach') coachHome(); else if (v === 'follow') followHome(0); else if (v === 'admin') adminHome();
   else if (v === 'quran') quranHome(); else if (v === 'acad') { ST.caseBack = acadHome; acadHome(); } else if (v === 'quality') qualityHome(); else if (v === 'board') boardHome(); else if (v === 'asmt') asmtHome(); else if (v === 'meet') meetHome(); else if (v === 'cert') certHome();
+  else if (v === 'complaints') caseListView('complaint', 'open', function () { go('complaints'); }); else if (v === 'qplans') caseListView('quran', 'open', function () { go('qplans'); });
 }
 
 // ======================================================================
@@ -542,14 +543,67 @@ function followHome(off) {
     var h = '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-w="' + (off - 1) + '">→ الأسبوع اللي فات</button><div style="text-align:center;font-weight:bold;color:var(--c)">' +
       (off === 0 ? 'الأسبوع الحالي' : off < 0 ? 'قبل ' + (-off) + ' أسبوع' : 'بعد ' + off + ' أسبوع') + '</div><button class="btn sm sec" type="button" data-w="' + (off + 1) + '"' + (off >= 0 ? ' disabled' : '') + '>الأسبوع الجاي ←</button></div></div>' +
       '<div class="stats"><div class="stat"><b>' + done + '/' + sessions.length + '</b><span>حلقات اتسجلت</span></div><div class="stat"><b>' + late + '</b><span>متأخرة / فائتة</span></div><div class="stat"><b>' + (total ? Math.round(present / total * 100) + '%' : '—') + '</b><span>الحضور</span></div></div>';
-    if (ME.isCoord) h += '<div class="panel"><button class="btn sec" type="button" data-myev="1">📝 متابعتي وتقييماتي من الجودة</button></div>';
+    h += '<div class="panel"><div class="row">' + (ME.isCoord ? '<button class="btn sec" type="button" data-myev="1">📝 متابعتي وتقييماتي</button>' : '') +
+      '<button class="btn sec" type="button" data-xla="1">⬇️ Excel (كل مجموعاتي)</button>' + (ME.canClasses ? '<button class="btn sec" type="button" data-cman="1">🏫 المجموعات</button>' : '') + '</div></div>';
     h += '<div class="panel" style="padding:8px 12px">' + TIMING_LEGEND + '</div>';
     h += list.length ? list.map(classCardHTML).join('') : '<div class="panel empty">مفيش مجموعات ضمن صلاحياتك.</div>';
     main(h);
-    $('main').onclick = function (e) { if (e.target.closest('[data-myev]')) { coordDetailView(ME.userCode); return; } var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
+    $('main').onclick = function (e) { if (e.target.closest('[data-myev]')) { coordDetailView(ME.userCode); return; }
+      var xb = e.target.closest('[data-xla]'); if (xb) { excelExport('', xb); return; } if (e.target.closest('[data-cman]')) { classesAdmin(); return; } var w = e.target.closest('[data-w]'); if (w && !w.disabled) { followHome(Number(w.dataset.w)); return; } var c = e.target.closest('[data-fc]'); if (c) { Sound.play('tap'); followClass(c.dataset.fc); } };
   });
 }
 // v5.21.2: لون الحلقة = توقيت التسجيل (أخضر في ميعاده • برتقاني متأخر • أحمر فائت) — المهام ليها علامة 📋⏳ لوحدها
+// v5.24: ⬇️ Excel — نسخة من البيانات اللي في نطاقك (الشيت الأصلي ما بيتلمسش)
+function loadXlsx() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise(function (ok, no) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  sc.onload = function () { ok(window.XLSX); }; sc.onerror = function () { no(new Error('مش قادر أحمّل مكتبة الـ Excel — جرّب تاني')); }; document.head.appendChild(sc); }); }
+function excelExport(cls, btn) {
+  busy(btn, 'بيتجهز… ⏳');
+  call('exportData', [ME.code, cls || ''], function (d) {
+    loadXlsx().then(function (X) {
+      var wb = X.utils.book_new();
+      d.sheets.forEach(function (sh) { var ws = X.utils.aoa_to_sheet(sh.rows); ws['!cols'] = (sh.rows[0] || []).map(function (h) { return { wch: Math.max(10, Math.min(30, String(h).length + 4)) }; });
+        if (!wb.Workbook) wb.Workbook = { Views: [{ RTL: true }] }; X.utils.book_append_sheet(wb, ws, sh.name.slice(0, 31)); });
+      X.writeFile(wb, d.file.replace(/[\\/:*?"<>|]/g, '') + '.xlsx'); busy(btn); Sound.play('ok'); toast('اتحمّل ✅');
+    }, function (er) { busy(btn); failed(er); });
+  }, function (er) { busy(btn); failed(er); });
+}
+// v5.24: 🏫 المجموعات (الأدمن والمديرين) — بدل الشيت
+function classesAdmin(sel) {
+  loading();
+  call('classAdmin', [ME.code], function (d) {
+    var cur = sel === '' ? { name: '', branch: (d.branches[0] || {}).code || '', program: (d.programs[0] || {}).code || '', level: '', coach: '', assistant: '', day: '', quranSlot: '', quranTeach: '', quranTo: '' } : (d.classes.filter(function (c) { return c.name === sel; })[0] || null);
+    var progOf = function (code) { return d.programs.filter(function (p) { return p.code === code; })[0] || { levels: [], quranLevels: [] }; };
+    var co = d.coaches.map(function (c) { return { v: c.code, l: c.name }; });
+    var h = '<button class="back" type="button" data-b="1">→ رجوع للمتابعة</button><div class="panel"><div class="row"><h3 style="margin:0">🏫 المجموعات</h3><button class="btn sm" type="button" data-cn="1" style="flex:0 0 auto">➕ مجموعة</button></div>' +
+      '<div class="sub">إضافة مجموعة وتغيير مربيها ويومها وساعة القرآن — من غير الشيت. كل تغيير بيتسجل في «سجل_التعديلات». الطلاب بيتضافوا من صفحة المجموعة.</div></div>';
+    if (cur) { var p = progOf(cur.program);
+      h += '<div class="panel" style="border:2px solid var(--c)"><h3>' + (cur.name ? '✏️ ' + esc(cur.name) : '➕ مجموعة جديدة') + '</h3>' +
+        (cur.name ? '' : '<div class="f"><label class="lb">اسم المجموعة:</label><input type="text" id="cg-name" placeholder="زي: T1_السبت_بنات03"></div>') +
+        '<div class="row"><div class="f"><label class="lb">الفرع:</label><select id="cg-branch">' + opts(d.branches.map(function (b) { return { v: b.code, l: b.name }; }), cur.branch) + '</select></div>' +
+        '<div class="f"><label class="lb">البرنامج:</label><select id="cg-program">' + opts(d.programs.map(function (q) { return { v: q.code, l: q.name }; }), cur.program) + '</select></div></div>' +
+        '<div class="row"><div class="f"><label class="lb">المستوى:</label><select id="cg-level">' + opts(p.levels, cur.level, '—') + '</select></div><div class="f"><label class="lb">يوم الحلقة:</label><select id="cg-day">' + opts(d.days, cur.day, '—') + '</select></div></div>' +
+        '<div class="row"><div class="f"><label class="lb">المربي:</label><select id="cg-coach">' + opts(co, cur.coach, '—') + '</select></div><div class="f"><label class="lb">المربي المساعد:</label><select id="cg-assistant">' + opts(co, cur.assistant, '—') + '</select></div></div>' +
+        '<h3 style="margin-top:8px">📖 ساعة القرآن (اختياري)</h3><div class="row"><div class="f"><label class="lb">اسم الساعة (نفس الاسم للمجموعات اللي بتتبادل):</label><input type="text" id="cg-quranSlot" value="' + esc(cur.quranSlot) + '" placeholder="زي: أولاد – الجمعة"></div>' +
+        '<div class="f"><label class="lb">المربي بيدرّس:</label><select id="cg-quranTeach">' + opts(p.quranLevels, cur.quranTeach, '—') + '</select></div></div>' +
+        '<div class="f"><label class="lb">تحويل القرآن (لو فيه مربيين لنفس المستوى):</label><input type="text" id="cg-quranTo" value="' + esc(cur.quranTo) + '" placeholder="سورة الممتحنة: اسم المجموعة"></div>' +
+        '<div class="row"><button class="btn" type="button" data-cs="1">حفظ ✅</button><button class="btn sec" type="button" data-cx="1">إلغاء</button></div></div>'; }
+    h += '<div class="panel">' + (d.classes.length ? d.classes.map(function (c) {
+      return '<div class="cls ok" data-ce="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(progOf(c.program).name || c.program) + ' • ' + esc(c.level || '—') + ' • ' + esc(c.day || '—') + ' • 👤 ' + esc(c.coachName || '—') + (c.assistantName ? ' + ' + esc(c.assistantName) : '') +
+        ' • ' + c.kids + ' طالب' + (c.quranSlot ? ' • 📖 ' + esc(c.quranSlot) + (c.quranTeach ? ' (' + esc(c.quranTeach) + ')' : '') : '') + '</div></div>'; }).join('') : '<div class="empty">مفيش مجموعات.</div>') + '</div>';
+    main(h);
+    var m = $('main');
+    m.onchange = function (e) { if (e.target.id === 'cg-program') { var p2 = progOf(e.target.value); $('cg-level').innerHTML = opts(p2.levels, '', '—'); $('cg-quranTeach').innerHTML = opts(p2.quranLevels, '', '—'); } };
+    m.onclick = function (e) {
+      if (e.target.closest('[data-b]')) { followHome(FW || 0); return; }
+      if (e.target.closest('[data-cn]')) { classesAdmin(''); return; }
+      if (e.target.closest('[data-cx]')) { classesAdmin(); return; }
+      var ce = e.target.closest('[data-ce]'); if (ce) { classesAdmin(ce.dataset.ce); return; }
+      var bs = e.target.closest('[data-cs]'); if (bs) { var o = { name: cur.name || ($('cg-name') ? $('cg-name').value : '') };
+        ['branch', 'program', 'level', 'day', 'coach', 'assistant', 'quranSlot', 'quranTeach', 'quranTo'].forEach(function (k) { o[k] = $('cg-' + k).value; });
+        busy(bs, '⏳'); call('saveClass', [ME.code, o, !cur.name], function () { Sound.play('ok'); toast('اتحفظ ✅'); classesAdmin(); }, function (er) { busy(bs); failed(er); }); }
+    };
+  }, function (er) { failed(er); followHome(FW || 0); });
+}
 function timingCls(t) { return t === 'في ميعاده' ? 'ok' : t === 'فائت' ? 'no' : 'wait'; }
 var TIMING_LEGEND = '<div class="sub" style="margin:6px 0 0">ألوان الحلقات: <span class="pill ok">اتسجلت في ميعادها</span> <span class="pill wait">اتسجلت متأخر</span> <span class="pill no">اتسجلت بعد ما الميعاد فات خالص</span> <span class="pill no">⏳ لسه ما اتسجلتش</span> • <b>📋⏳</b> = فيه مهمة لسه «لم يتم»</div>';
 function taskCell(x) { if (!x || !x.v) return '<td>—</td>'; if (x.v === 'لم يتم') return '<td><span class="pill wait">⏳</span></td>';
@@ -585,11 +639,15 @@ function followClass(cls) {
         '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-a="exam">📝 الميد / الفاينال</button></div></div>'; }
     if (d.pending.length) h += '<div class="panel"><h3>🆕 طلاب مستنيين تأكيد</h3>' + d.pending.map(function (p) {
       return '<div class="ur"><span>' + esc(p.name) + ' <small style="color:var(--m)">أضافه ' + esc(p.by) + ' من حلقة ' + esc(p.from) + '</small></span>' + (ME.qualityOnly ? '' : '<span><button class="btn sm" type="button" data-a="confirm" data-c="' + esc(p.code) + '">تأكيد</button> <button class="btn sm sec" type="button" data-a="reject" data-c="' + esc(p.code) + '">رفض</button></span>') + '</div>'; }).join('') + '</div>';
-    h += '<div class="panel"><h3>👥 الطلاب (' + d.students.filter(function (s) { return s.status !== 'منسحب' && s.status !== 'مرفوض'; }).length + ')</h3>' + d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
-      return '<div class="ur' + (s.status === 'منسحب' ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : '') +
+    var gone = function (s) { return s.status === 'منسحب' || s.status === 'اتنقل'; };
+    h += '<div class="panel"><div class="row"><h3 style="margin:0">👥 الطلاب (' + d.students.filter(function (s) { return !gone(s) && s.status !== 'مرفوض'; }).length + ')</h3>' +
+      (ME.qualityOnly ? '' : '<button class="btn sm" type="button" data-a="addst" style="flex:0 0 auto">➕ طالب</button>') + '<button class="btn sm sec" type="button" data-a="xl" style="flex:0 0 auto">⬇️ Excel</button></div><div id="stbox"></div>' +
+      d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
+      return '<div class="ur' + (gone(s) ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : s.status === 'اتنقل' ? ' <small>(اتنقل لـ ' + esc(s.movedTo) + ' من ح' + esc(s.until) + ')</small>' : '') +
+        (!gone(s) && !ME.qualityOnly ? ' <button type="button" class="pill" data-a="ren" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '" style="border:none;cursor:pointer;font-family:inherit" title="تعديل الاسم">✏️</button>' : '') +
         ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center">' +
         '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
-        (s.status !== 'منسحب' && !ME.qualityOnly ? '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
+        (!gone(s) && !ME.qualityOnly ? ((d.moveTargets || []).length ? '<button class="btn ghost" type="button" data-a="move" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '">نقل</button>' : '') + '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
     if (d.qPlan) { var qp = d.qPlan;   // v5.23: توزيع ساعة القرآن
       h += '<div class="panel" style="border-top:5px solid #2e8b57"><h3>📖 ساعة القرآن: ' + esc(qp.slot) + '</h3><div class="sub">' + esc(qp.coach) + ' بيدرّس: <b>' + esc(qp.teach || 'مش متحدد') + '</b> • المجموعات في نفس الساعة: ' +
         qp.mates.map(function (m) { return esc(m.cls) + ' (' + esc(m.coach) + ' — ' + esc(m.teach || 'مش متحدد') + ')'; }).join('، ') + '</div>' +
@@ -612,7 +670,23 @@ function followClass(cls) {
       else if (a === 'confirm' || a === 'reject') call('setEnrollment', [ME.code, cls, b.dataset.c, a], function () { Sound.play('ok'); followClass(cls); });
       else if (a === 'withdraw') { var n = prompt('انسحب من أنهي حلقة؟ (رقم الحلقة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
       else if (a === 'report') report(b.dataset.c);
-      else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel)$/.test(a)) return;
+      else if (a === 'xl') excelExport(cls, b);
+      else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel|addst|ren|move|mvgo|asgo)$/.test(a)) return;
+      else if (a === 'addst') { $('stbox').innerHTML = '<div class="info" style="margin:8px 0"><b>➕ طالب جديد</b><div class="f" style="margin:6px 0 0"><input type="text" id="as-name" placeholder="اسم الطالب بالكامل"></div>' +
+          '<div class="row"><div class="f" style="margin:6px 0 0"><input type="text" id="as-birth" placeholder="تاريخ الميلاد (2014-05-20) أو السنة"></div><div class="f" style="margin:6px 0 0"><select id="as-q">' + opts(d.quranLevels, '', 'مستوى القرآن') + '</select></div></div>' +
+          '<div class="row" style="align-items:center"><label class="lb" style="flex:0 0 auto;margin:6px 0 0">من حلقة:</label><input type="number" id="as-from" min="1" value="' + ((d.sessions.filter(function (x) { return x.status === 'open'; })[0] || { n: 1 }).n) + '" style="flex:0 0 90px;margin-top:6px"><button class="btn sm" type="button" data-a="asgo" style="margin-top:6px">إضافة ✅</button></div>' +
+          '<div class="sub" style="margin:4px 0 0">بيتسجل «مسجل» على طول (من غير «مستني تأكيد»).</div></div>'; $('as-name').focus(); }
+      else if (a === 'asgo') { busy(b, '⏳'); call('addStudent', [ME.code, cls, { name: $('as-name').value, birth: $('as-birth').value, quran: $('as-q').value, from: $('as-from').value }],
+          function (r) { Sound.play('ok'); toast('اتضاف ' + r.name + ' ✅'); followClass(cls); }, function (er) { busy(b); failed(er); }); }
+      else if (a === 'ren') { var nn = prompt('الاسم الصح:', b.dataset.nm); if (!nn || nn.trim() === b.dataset.nm) return;
+        call('renameStudent', [ME.code, cls, b.dataset.c, nn.trim()], function () { Sound.play('ok'); toast('اتعدّل الاسم ✅'); followClass(cls); }); }
+      else if (a === 'move') { var nx = (d.sessions.filter(function (x) { return x.status === 'open'; })[0] || { n: '' }).n;
+        $('stbox').innerHTML = '<div class="info" style="margin:8px 0"><b>نقل ' + esc(b.dataset.nm) + '</b><div class="row" style="align-items:center;margin-top:6px"><select id="mv-to">' + opts(d.moveTargets, '', 'للمجموعة') + '</select>' +
+          '<label class="lb" style="flex:0 0 auto;margin:0">من حلقة:</label><input type="number" id="mv-n" min="1" value="' + nx + '" style="flex:0 0 80px"></div>' +
+          '<div class="sub" style="margin:4px 0">الحلقات اللي قبل كده بتفضل في ملفه باسم المجموعة دي، ومن الحلقة دي بيظهر في المجموعة الجديدة. مستوى القرآن بيتنقل معاه.</div><button class="btn sm" type="button" data-a="mvgo" data-c="' + esc(b.dataset.c) + '">نقل ✅</button></div>';
+        $('stbox').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      else if (a === 'mvgo') { if (!$('mv-to').value) { toast('اختار المجموعة'); return; } busy(b, '⏳');
+        call('moveStudent', [ME.code, cls, b.dataset.c, $('mv-to').value, $('mv-n').value], function (r) { Sound.play('ok'); toast('اتنقل لـ ' + r.to + ' من ح' + r.from + ' ✅'); followClass(cls); }, function (er) { busy(b); failed(er); }); }
       else if (a === 'wnew') warnForm(cls, b.dataset.c);
       else if (a === 'sbsave') { var sn = $('sb-n').value, sc = $('sb-c').value; if (!sn || !sc) { toast('اختار الحلقة والمربي'); return; } busy(b, '⏳');
         call('assignSub', [ME.code, cls, sn, sc, $('sb-r').value], function () { busy(b); Sound.play('ok'); toast('اتحدد البديل ✅'); subBox(cls); }, function (er) { busy(b); failed(er); }); }
@@ -743,7 +817,7 @@ function coordBoardView() {
   });
 }
 function coordDetailView(code) {
-  loading();
+  loading(); ST.evApi = null;
   var q = ST.cq || { from: '', to: '' };
   call('coordDetail', [ME.code, code, q.from, q.to], function (d) {
     ST.cdd = d;
@@ -767,10 +841,12 @@ function coordDetailView(code) {
     };
   });
 }
+function evApi() { return ST.evApi || { meta: 'coordEvalMeta', save: 'saveCoordEval', who: 'المنسق' }; }
 function coordEvalForm(d) {
+  var A = evApi();
   var go = function (M) {
-    ST.cmeta = M; ST.ceval = {}; var q = ST.cq || {};
-    var h = '<div class="panel"><h3>📝 تقييم المنسق — ' + esc(d.name) + '</h3><div class="sub">الأرقام اللي فوق بتتحفظ مع التقييم. السلّم: ' + M.scale.map(function (x) { return (x[0] === 'NO' ? 'N/O' : x[0]) + ' ' + x[1]; }).join(' • ') + '</div>' +
+    ST.cmeta = M; ST.cmetaFor = A.meta; ST.ceval = {}; var q = ST.cq || {};
+    var h = '<div class="panel"><h3>📝 تقييم ' + A.who + ' — ' + esc(d.name) + '</h3><div class="sub">الأرقام اللي فوق بتتحفظ مع التقييم. السلّم: ' + M.scale.map(function (x) { return (x[0] === 'NO' ? 'N/O' : x[0]) + ' ' + x[1]; }).join(' • ') + '</div>' +
       '<div class="row"><div class="f"><label class="lb">الفترة من:</label><input type="date" id="ce-from" value="' + esc(q.from || '') + '"></div><div class="f"><label class="lb">إلى:</label><input type="date" id="ce-to" value="' + esc(q.to || new Date().toISOString().slice(0, 10)) + '"></div></div></div>';
     M.sections.forEach(function (sec) {
       h += '<div class="panel"><h3>' + esc(sec) + '</h3>' + M.items.filter(function (i) { return i.section === sec; }).map(function (it, n) {
@@ -786,7 +862,7 @@ function coordEvalForm(d) {
       '<button class="btn" type="button" data-a="cesave" style="margin-top:10px">حفظ التقييم ✅</button></div>';
     $('cebox').innerHTML = h; $('cebox').scrollIntoView({ behavior: 'smooth' });
   };
-  if (ST.cmeta) go(ST.cmeta); else { $('cebox').innerHTML = '<div class="panel loading">جاري التحميل…</div>'; call('coordEvalMeta', [ME.code], go); }
+  if (ST.cmeta && ST.cmetaFor === A.meta) go(ST.cmeta); else { $('cebox').innerHTML = '<div class="panel loading">جاري التحميل…</div>'; call(A.meta, [ME.code], go); }
 }
 function coordPick(b) {
   var M = ST.cmeta, k = b.dataset.c, v = b.dataset.v === 'NO' ? 'NO' : Number(b.dataset.v), o = ST.ceval[k] = ST.ceval[k] || {};
@@ -801,12 +877,14 @@ function saveCoordEvalForm(d, b) {
   if (miss.length) { Sound.play('err'); toast('ناقص ' + miss.length + ' بند — اختار درجة أو N/O (أولهم: ' + miss[0].name + ')'); var mb = f.querySelector('[data-c="' + miss[0].key + '"]'); if (mb) mb.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   var list = function (attr) { return [].map.call(f.querySelectorAll('[' + attr + ']'), function (e) { return e.value; }); };
   busy(b, 'جاري الحفظ… ⏳');
-  call('saveCoordEval', [ME.code, d.code, { from: $('ce-from').value, to: $('ce-to').value, scores: ST.ceval, strengths: list('data-cs'), improve: list('data-ci'), plan: $('ce-plan').value, notes: $('ce-notes').value }],
-    function (r) { busy(b); Sound.play('ok'); toast('اتحفظ ✅ — المتوسط ' + r.avg); coordDetailView(d.code); }, function (e) { busy(b); failed(e); });
+  var A = evApi();
+  call(A.save, [ME.code, d.code, { from: $('ce-from').value, to: $('ce-to').value, scores: ST.ceval, strengths: list('data-cs'), improve: list('data-ci'), plan: $('ce-plan').value, notes: $('ce-notes').value }],
+    function (r) { busy(b); Sound.play('ok'); toast('اتحفظ ✅ — المتوسط ' + r.avg); if (A.after) A.after(); else coordDetailView(d.code); }, function (e) { busy(b); failed(e); });
 }
 function coordEvalView(v) {
+  var A = evApi();
   var go = function (M) {
-    ST.cmeta = M;
+    ST.cmeta = M; ST.cmetaFor = A.meta;
     var ul = function (xs) { return xs.length ? '<ol>' + xs.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>' : '<div class="sub">—</div>'; };
     var h = '<div class="panel"><h3>📝 تقييم ' + esc(v.time.slice(0, 10)) + ' — متوسط ' + esc(v.avg) + ' من 4</h3><div class="sub">' + esc(v.by) + (v.from || v.to ? ' • الفترة ' + esc(v.from || '…') + ' ← ' + esc(v.to || '…') : '') + '</div>' + (v.metrics && v.metrics.groups != null ? mLine(v.metrics) : '') + '</div>';
     M.sections.forEach(function (sec) {
@@ -816,7 +894,7 @@ function coordEvalView(v) {
     h += '<div class="panel"><h3>⭐ نقاط القوة</h3>' + ul(v.strengths) + '<h3>📈 أولويات التحسين</h3>' + ul(v.improve) + '<h3>⚙️ خطة المتابعة</h3><div>' + esc(v.plan || '—') + '</div>' + (v.notes ? '<h3>📝 ملاحظات</h3><div>' + esc(v.notes) + '</div>' : '') + '</div>';
     $('cebox').innerHTML = h; $('cebox').scrollIntoView({ behavior: 'smooth' });
   };
-  if (ST.cmeta) go(ST.cmeta); else call('coordEvalMeta', [ME.code], go, function () { go({ sections: [], items: [], scale: VISIT_SCALE_UI }); });
+  if (ST.cmeta && ST.cmetaFor === A.meta) go(ST.cmeta); else call(A.meta, [ME.code], go, function () { go({ sections: [], items: [], scale: VISIT_SCALE_UI }); });
 }
 var VISIT_SCALE_UI = [[4, 'متميز', ''], [3, 'جيد', ''], [2, 'نام', ''], [1, 'يحتاج إلى دعم', ''], ['NO', 'لم تتم ملاحظته', '']];
 
@@ -1076,6 +1154,7 @@ function acadHome() {
   loading();
   call('casesHome', [ME.code], function (d) {
     var au = d.auth || {};
+    d.kinds = d.kinds.filter(function (k) { return k.kind !== 'complaint' && k.kind !== 'quran'; });   // v5.24: الشكاوى وخطط القرآن ليهم أيقونات لوحدهم
     var h = '<div class="panel"><h3>🎓 الخطط والحالات</h3>' + (au.on ? '<div class="row" style="margin-bottom:8px"><div class="sub" style="margin:0">' +
         (au.ok ? '🔐 داخل بحساب Google: ' + esc(au.signedIn) : (au.signedIn ? '⚠️ إنت داخل بـ ' + esc(au.signedIn) + ' والمسجّل باسمك ' + esc(au.registered || '(مفيش إيميل)') : '🔒 خطط المربين والسلوك والشكاوى محتاجة دخول بحساب Google')) +
         '</div>' + (au.ok ? '' : googleBtn()) + '</div>' : '') + d.kinds.map(function (k) {
@@ -1812,9 +1891,9 @@ function meetHome() {
   call('meetHome', [ME.code], function (d) {
     ST.mh = d;
     var h = '<div class="panel"><div class="row"><h3 style="margin:0">🗓️ حضور المربين</h3>' + (d.canEdit ? '<button class="btn sm" type="button" data-mn="1" style="flex:0 0 auto">➕ سجّل اجتماع</button>' : '') + '</div>' +
-      '<div class="sub">المقرأة، ميتينج الـ Lesson Plan، التدريبات وأي اجتماع تاني — مين حضر ومين لأ.</div></div>';
+      '<div class="sub">المقرأة، ميتينج الـ Lesson Plan، التدريبات وأي اجتماع تاني — مين حضر ومين لأ. اضغط على اسم المربي علشان تفتح ملفه.</div></div>';
     h += '<div class="panel"><h3>👥 المربين</h3>' + (d.summary.length ? '<div class="tw"><table><thead><tr><th>المربي</th>' + d.kinds.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      d.summary.map(function (c) { return '<tr><td style="text-align:right">' + esc(c.name) + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') + '</td>' + d.kinds.map(function (k) { var x = c.kinds[k];
+      d.summary.map(function (c) { return '<tr><td style="text-align:right"><a href="#" data-cp="' + esc(c.code) + '">👤 ' + esc(c.name) + '</a>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') + '</td>' + d.kinds.map(function (k) { var x = c.kinds[k];
         return '<td>' + (x ? '<b class="' + (x.yes === x.total ? 's5' : x.yes ? 's3' : 's1') + '">' + x.yes + '/' + x.total + '</b>' + (x.excused ? '<br><small>اعتذر ' + x.excused + '</small>' : '') : '—') + '</td>'; }).join('') + '</tr>'; }).join('') +
       '</tbody></table></div><div class="sub">الرقم = حضر كام مرة من كام اجتماع اتسجل.</div>' : '<div class="empty">مفيش مربين في نطاقك.</div>') + '</div>';
     h += '<div class="panel"><h3>🗂️ الاجتماعات المسجلة</h3>' + (d.meetings.length ? d.meetings.map(function (m) {
@@ -1822,8 +1901,49 @@ function meetHome() {
     main(h);
     $('main').onclick = function (e) { var b;
       if (e.target.closest('[data-mn]')) { meetForm(null); return; }
+      if ((b = e.target.closest('[data-cp]'))) { e.preventDefault(); coachProfileView(b.dataset.cp); return; }
       if ((b = e.target.closest('[data-mo]'))) { loading(); call('meetGet', [ME.code, b.dataset.mo], function (m) { meetForm(m); }, function (er) { failed(er); meetHome(); }); } };
   });
+}
+// v5.24: 👤 ملف المربي — كل حاجة عنه في مكان واحد
+function coachProfileView(code) {
+  loading();
+  var q = ST.cpq || { from: '', to: '' };
+  call('coachProfile', [ME.code, code, q.from, q.to], function (d) {
+    ST.cpd = d; ST.evApi = { meta: 'coachEvalMeta', save: 'saveCoachEval', who: 'المربي', after: function () { coachProfileView(code); } };
+    var m = d.m, pill = function (cls, t) { return '<span class="pill ' + cls + '">' + t + '</span>'; };
+    var caseLines = function (kind, list, empty) { if (list === null) return '<div class="sub">مش ضمن صلاحياتك.</div>'; return list.length ? list.map(function (c) {
+      return '<div class="line" data-cv="' + kind + '|' + esc(c.id) + '" style="cursor:pointer"><span class="k">' + esc(c.time) + ' • ' + esc(c.id) + (c.name ? ' • ' + esc(c.name) : '') + '</span><small>' + esc(c.status) + (c.result ? ' — ' + esc(c.result) : '') + (c.cycle ? ' • الدورة ' + esc(c.cycle) : '') + '</small></div>'; }).join('') : '<div class="empty">' + empty + '</div>'; };
+    var h = '<button class="back" type="button" data-pb="1">→ رجوع للمربين</button><div class="panel"><h3>👤 ' + esc(d.name) + '</h3>' +
+      '<div class="sub">' + d.classes.map(function (c) { return esc(c.name) + ' (' + c.role + (c.other ? ' مع ' + esc(c.other) : '') + ')'; }).join(' • ') + '</div>' +
+      '<div class="row"><div class="f"><label class="lb">من:</label><input type="date" id="cp-from" value="' + esc(q.from) + '"></div><div class="f"><label class="lb">إلى:</label><input type="date" id="cp-to" value="' + esc(q.to) + '"></div></div>' +
+      '<div class="line">' + pill(m.onTimePct == null ? '' : m.onTimePct >= 80 ? 'ok' : 'wait', '📋 ' + (m.onTimePct == null ? 'لسه مفيش حلقات' : m.onTimePct + '% من ' + m.logs + ' حلقة في ميعادها')) +
+        (m.late ? pill('wait', 'متأخر ' + m.late) : '') + (m.missed ? pill('no', 'فائت ' + m.missed) : '') + (m.missing ? pill('no', '⏳ ' + m.missing + ' حلقة ما اتسجلتش') : '') + (m.tasksOpen ? pill('wait', 'مهام «لم يتم» ' + m.tasksOpen) : '') +
+        (m.subs ? pill('c', '🔁 بديل ' + m.subs + ' مرة') : '') + pill(m.meetNo ? 'wait' : 'ok', '🗓️ حضر ' + m.meetYes + (m.meetExcused ? ' • اعتذر ' + m.meetExcused : '') + (m.meetNo ? ' • غاب ' + m.meetNo : '')) +
+        pill(m.warns ? 'no' : 'ok', '⚠️ ' + m.warns + ' إنذار') + '</div>' +
+      '<div class="row" style="margin-top:8px">' + (d.canEval ? '<button class="btn" type="button" data-ce="1">📝 تقييم جديد</button>' : '') + (d.canDev ? '<button class="btn sec" type="button" data-dv="1">🌱 خطة تطوير</button>' : '') + '</div></div><div id="cebox"></div><div id="cbox"></div>';
+    h += '<div class="panel"><h3>📝 التقييمات (' + d.evals.length + ')</h3>' + (d.evals.length ? d.evals.map(function (v, i) {
+      return '<div class="cls ok" data-ev="' + i + '"><h4>' + esc(v.time.slice(0, 10)) + ' — متوسط ' + esc(v.avg) + ' من 4</h4><div class="m">' + esc(v.by) + (v.from || v.to ? ' • الفترة ' + esc(v.from || '…') + ' ← ' + esc(v.to || '…') : '') + '</div></div>'; }).join('') : '<div class="empty">لسه ما اتقيّمش.</div>') + '</div>';
+    h += '<div class="panel"><h3>🗓️ حضور الاجتماعات</h3>' + (Object.keys(d.meet).length ? Object.keys(d.meet).map(function (k) { var x = d.meet[k];
+      return '<div class="line"><span class="k">' + esc(k) + '</span><b>' + x.yes + '/' + x.total + '</b>' + (x.excused ? ' <small>اعتذر ' + x.excused + '</small>' : '') + '<small> — ' + x.list.map(function (r) { return esc(r.date) + ' ' + (r.att === 'حضر' ? '✓' : r.att === 'اعتذر' ? '(اعتذر)' : '✗'); }).join(' • ') + '</small></div>'; }).join('') : '<div class="empty">لسه مفيش اجتماعات متسجلة له.</div>') + '</div>';
+    h += '<div class="panel"><h3>🏫 الزيارات الصفية (' + d.visits.length + ')</h3>' + (d.visits.length ? d.visits.map(function (v) { return '<div class="line"><span class="k">' + esc(v.date) + ' • ' + esc(v.cls) + '</span><small>' + esc(v.kind) + ' • ' + esc(v.by || '') + (v.avg !== '' && v.avg != null ? ' • متوسط ' + esc(v.avg) : '') + (v.followDate ? ' • ⏰ متابعة ' + esc(v.followDate) : '') + '</small></div>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div>';
+    h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات (' + d.warns.length + ')</h3>' + (d.warns.length ? d.warns.map(function (w) { return warnRow(w, false); }).join('') : '<div class="empty">مفيش.</div>') + '</div>';
+    h += '<div class="panel"><h3>🌱 خطط التطوير</h3>' + caseLines('coachDev', d.dev, 'مفيش خطة تطوير.') + '</div>';
+    h += '<div class="panel"><h3>🎓 التدريبات</h3>' + caseLines('training', d.training, 'مفيش تدريب متسجل باسمه (من «الأكاديمي» ← تدريب ← المطلوبين / الحضور).') + '</div>';
+    h += '<div class="panel"><h3>📞 شكاوى في مجموعاته</h3>' + caseLines('complaint', d.complaints, 'مفيش شكاوى.') + '</div>';
+    main(h);
+    var mm = $('main');
+    mm.onchange = function (e) { if (e.target.id === 'cp-from' || e.target.id === 'cp-to') { ST.cpq = { from: $('cp-from').value, to: $('cp-to').value }; coachProfileView(code); } };
+    mm.onclick = function (e) { var b;
+      if (e.target.closest('[data-pb]')) { meetHome(); return; }
+      if (e.target.closest('[data-ce]')) { coordEvalForm(d); return; }
+      if ((b = e.target.closest('[data-ev]'))) { coordEvalView(d.evals[Number(b.dataset.ev)]); return; }
+      if ((b = e.target.closest('[data-a="vsc"]'))) { coordPick(b); return; }
+      if (e.target.closest('[data-a="cesave"]')) { saveCoordEvalForm(d, e.target); return; }
+      if (e.target.closest('[data-dv]')) { ensureMeta('coachDev', function () { caseForm('coachDev', null, { subjectLabel: d.name }); }); return; }
+      if ((b = e.target.closest('[data-cv]'))) { var x = b.dataset.cv.split('|'); caseView(x[0], x[1], function () { coachProfileView(code); }); }
+    };
+  }, function (er) { failed(er); meetHome(); });
 }
 function meetForm(m) {
   var d = ST.mh, x = { id: m ? m.id : '', date: m ? m.date : d.today, kind: m ? m.kind : d.kinds[0], title: m ? m.title || '' : '', notes: m ? m.notes || '' : '', att: {}, note: {} };
