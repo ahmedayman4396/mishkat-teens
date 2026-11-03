@@ -652,7 +652,9 @@ function followClass(cls) {
       h += '<div class="panel" style="border-top:5px solid #2e8b57"><h3>📖 ساعة القرآن: ' + esc(qp.slot) + '</h3><div class="sub">' + esc(qp.coach) + ' بيدرّس: <b>' + esc(qp.teach || 'مش متحدد') + '</b> • المجموعات في نفس الساعة: ' +
         qp.mates.map(function (m) { return esc(m.cls) + ' (' + esc(m.coach) + ' — ' + esc(m.teach || 'مش متحدد') + ')'; }).join('، ') + '</div>' +
         (qp.noLevel ? '<div class="sub" style="color:var(--warn)">⚠️ ' + qp.noLevel + ' طفل مستوى القرآن بتاعهم مش متسجل — بيفضلوا مع مربيهم.</div>' : '') +
-        qp.kids.map(function (k) { return '<div class="ur"><span>' + esc(k.name) + ' <small style="color:var(--m)">' + esc(k.quran || 'من غير مستوى') + '</small></span><span>' + (k.to ? '<span class="pill wait">← ' + esc(k.to) + '</span>' : '<span class="pill ok">مع مربيه</span>') + '</span></div>'; }).join('') +
+        qp.kids.map(function (k) { return '<div class="ur"><span>' + esc(k.name) + ' <small style="color:var(--m)">' + esc(k.quran || 'من غير مستوى') + '</small>' + (k.qc ? ' <small style="color:var(--warn)">(متحدد بالاسم)</small>' : '') + '</span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:62%">' + (k.to ? '<span class="pill wait">← ' + esc(k.to) + '</span>' : '<span class="pill ok">مع مربيه</span>') +
+          (ME.qualityOnly ? '' : '<select data-qc="' + esc(k.code) + '" style="width:auto;max-width:44vw;padding:5px;font-size:13px" title="حلقة القرآن للطفل ده">' + [{ v: '', l: 'تلقائي (' + (k.auto ? k.auto : 'مع مربيه') + ')' }, { v: cls, l: 'مع مربيه' }].concat(qp.mates.filter(function (m) { return m.cls !== cls; }).map(function (m) { return { v: m.cls, l: m.cls + ' — ' + (m.coach || '') + (m.teach ? ' (' + m.teach + ')' : '') }; })).map(function (o) { return '<option value="' + esc(o.v) + '"' + (o.v === k.qc ? ' selected' : '') + '>' + esc(o.l) + '</option>'; }).join('') + '</select>') + '</span></div>'; }).join('') +
+        '<div class="sub" style="margin-top:6px">التوزيع تلقائي حسب مستوى القرآن. لو طفل رايح لمربي غير التلقائي (زي جدول قسم القرآن)، اختار حلقته من القايمة اللي جنبه.</div>' +
         ((d.qPending || []).length ? '<div class="sub" style="margin-top:8px"><b>قرآن لسه ما اتسجلش:</b> ' + d.qPending.map(function (p) { return esc(p.name) + ' ح' + p.n + ' (عند ' + esc(p.to) + ')'; }).join('، ') + '</div>' : '') + '</div>'; }
     var tl = d.tasksLog || [];
     h += '<div class="panel"><h3>✅ مهام الحلقات</h3>' + (tl.length ? '<div class="tw"><table style="font-size:13px"><thead><tr><th>الحلقة</th><th>التسجيل</th>' + ME.tasks.map(function (t) { return '<th>' + esc(t[1]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
@@ -707,7 +709,8 @@ function followClass(cls) {
       else if (a === 'vsave') saveVisit(cls);
       else if (a === 'cell') correctCell(cls, b);
     };
-    m.onchange = function (e) { var q = e.target.dataset.q; if (q !== undefined) call('setEnrollment', [ME.code, cls, q, 'quran', e.target.value], function () { toast('اتحفظ مستوى القرآن'); }); };
+    m.onchange = function (e) { var q = e.target.dataset.q, qc = e.target.dataset.qc; if (q !== undefined) call('setEnrollment', [ME.code, cls, q, 'quran', e.target.value], function () { toast('اتحفظ مستوى القرآن'); }, failed);
+      if (qc !== undefined) call('setEnrollment', [ME.code, cls, qc, 'qclass', e.target.value], function () { Sound.play('ok'); toast('اتحفظت حلقة القرآن ✅'); followClass(cls); }, failed); };
   });
 }
 function followSession(cls, n) {
