@@ -1519,9 +1519,15 @@ function asmtHome() {
         (x.week ? ' • أسبوع ' + esc(x.week) : '') + (x.date ? ' • ' + esc(x.date) : '') + ' • ' + (x.nQuran ? x.nContent + ' محتوى + ' + x.nQuran + ' قرآن' : x.domains + ' مجال') + '</div>' +
         '<div class="sub" style="margin:2px 0 0">' + (x.session ? '⏰ التسليم: ' + esc(x.dueHours) + ' ساعة بعد الحلقة ' + esc(x.session) : (x.due ? '⏰ التسليم: ' + esc(x.due) : 'من غير موعد تسليم')) + (x.status === 'مقفول' ? ' • <span class="pill wait">مقفول</span>' : '') + '</div></div>' +
         (d.canSeeAll ? '<button class="btn sm sec" type="button" data-ar="' + esc(x.id) + '" style="flex:0 0 auto">📊 التقرير</button>' : '') + '</div>' +
+        (d.canSeeAll && x.status !== 'مقفول' ? (function () {   // v5.26: مين من المربيين لسه ما سلّمش
+          var miss = x.classes.filter(function (c) { return !c.submitted; }), lt = miss.filter(function (c) { return c.late; });
+          return !miss.length ? '<div class="sub" style="color:#2e7d32;margin:6px 0">✅ كل المربيين سلّموا</div>' :
+            '<div style="background:' + (lt.length ? '#fdecea' : '#fff8e1') + ';border-radius:10px;padding:8px 10px;margin:8px 0"><b>⏳ لسه ما سلّمش (' + miss.length + ' من ' + x.classes.length + ')' + (lt.length ? ' — متأخر ' + lt.length : '') + ':</b><div style="margin-top:4px;line-height:1.9">' +
+            miss.map(function (c) { return '<span style="display:inline-block;margin-left:10px">' + (c.late ? '🔴 ' : '🟡 ') + '<b>' + esc(c.coach || 'من غير مربي') + '</b> <small style="color:var(--m)">(' + esc(c.name) + ' • ' + c.done + '/' + c.students + ')</small></span>'; }).join('') + '</div></div>';
+        })() : '') +
         x.classes.map(function (c) {
           var st = c.submitted ? '<span class="pill ok">✅ اتسلّم</span>' : (c.late ? '<span class="pill" style="background:#fdecea;color:var(--bad)">⏳ متأخر</span>' : '<span class="pill wait">لسه</span>');
-          return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + c.done + ' / ' + c.students + ' طالب' + (x.session && c.due ? ' • لحد ' + esc(c.due) : '') + '</small> ' + st + '</span><span style="white-space:nowrap">' +
+          return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + (c.coach ? esc(c.coach) + ' • ' : '') + c.done + ' / ' + c.students + ' طالب' + (x.session && c.due ? ' • لحد ' + esc(c.due) : '') + '</small> ' + st + '</span><span style="white-space:nowrap">' +
             (c.mine || d.canCreate ? '<button class="btn ghost" type="button" data-ae="' + esc(x.id) + '" data-c="' + esc(c.name) + '">' + (x.status === 'مقفول' ? 'عرض' : 'الدرجات') + '</button>' : '') +
             (!d.canSeeAll ? '<button class="btn ghost" type="button" data-ar="' + esc(x.id) + '">النتيجة</button>' : '') + '</span></div>'; }).join('') +
         (d.canCreate ? '<div class="row" style="margin-top:8px"><button class="btn sm sec" type="button" data-aedit="' + esc(x.id) + '">✏️ تعديل</button><button class="btn sm sec" type="button" data-ast="' + esc(x.id) + '" data-s="' + (x.status === 'مقفول' ? 'مفتوح' : 'مقفول') + '">' + (x.status === 'مقفول' ? '🔓 فتح' : '🔒 قفل') + '</button></div>' : '') + '</div>';
@@ -1735,15 +1741,15 @@ function asmtEntry(id, cls, back) {
       var e = ST.ae, dis = d.canEdit ? '' : ' disabled';
       var withSec = doms.some(function (z) { return z.sec; }) || doms.some(function (z) { return z.g === 'quran'; }) && doms.some(function (z) { return z.g !== 'quran'; });
       return '<div class="panel"><div class="sub" style="margin:0 0 6px">اكتب الرقم من الكشف • <b>3+</b> = 3 وقريب من اللي بعده (↑) • Tab للخانة اللي بعدها</div><div class="tw"><table style="font-size:13px;table-layout:fixed"><thead>' +
-        (withSec ? '<tr><th style="border-bottom:none"></th>' + secGroups(doms).map(function (gp) { return '<th colspan="' + gp.n + '" style="font-size:11.5px;white-space:normal;line-height:1.2;color:' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + ';border-bottom:2px solid ' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + '">' + esc(gp.key) + '</th>'; }).join('') + '</tr>' : '') +
-        '<tr><th style="text-align:right;width:34%">الطالب</th>' +
+        (withSec ? '<tr><th style="border-bottom:none;width:30%"></th>' + secGroups(doms).map(function (gp) { return '<th colspan="' + gp.n + '" style="font-size:11.5px;white-space:normal;line-height:1.2;color:' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + ';border-bottom:2px solid ' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + '">' + esc(gp.key) + '</th>'; }).join('') + '</tr>' : '') +
+        '<tr><th style="text-align:right;width:30%">الطالب</th>' +
         doms.map(function (dm) { var S = dS(a, dm); return '<th title="' + esc(dm.desc || '') + '" style="white-space:normal;font-size:11.5px;line-height:1.2">' + esc(dm.name) + '<br><small style="color:var(--m);font-weight:normal">' + S.min + '–' + S.max + (S.step < 1 ? ' (' + (S.step === 0.5 ? '½' : '¼') + ')' : '') + (dm.w !== '' && dm.w != null ? ' • ' + dm.w + 'د' : '') + (dm.ql ? '<br>📖 ' + esc(dm.ql) : '') + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
         d.students.map(function (s) { var r = e.rows[s.code], off = r.att !== 'حاضر';
           return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + qlPill(s) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
             '<select data-ga="' + esc(s.code) + '" style="width:auto;padding:3px;font-size:12px;margin-top:3px"' + dis + '>' + opts(['حاضر', 'غائب', 'لم يُقيَّم'], r.att) + '</select></td>' +
             doms.map(function (dm) { if (!dFor(dm, r.ql)) return '<td style="border-bottom:none;padding-bottom:0;color:var(--m);text-align:center" title="مش لمستوى القرآن بتاعه">—</td>';
               var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v).replace(/[\u2066\u2069]/g, '') + (c.up ? '+' : '') : '';
-              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="numeric" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
+              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="' + (dS(a, dm).step < 1 ? 'decimal' : 'numeric') + '" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
             '<tr><td colspan="' + (doms.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
         '</tbody></table></div>' +
         '<details class="scl" style="margin-top:8px"><summary>ⓘ معنى الدرجات</summary>' + a.labels.map(function (t, i) { return '<div><b>' + (a.min + i) + '</b>' + esc(t || '—') + '</div>'; }).join('') +
@@ -1857,7 +1863,8 @@ function asmtReportView(id) {
     var a = d.a, others = (ST.ah && ST.ah.list || []).filter(function (x) { return x.id !== a.id && x.program === a.programName; });
     var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>📊 ' + esc(a.name) + '</h3><div class="sub">' + esc(a.programName) + ' • ' + esc(a.kind) + (aHasPts(a) ? ' • الدرجة النهائية ' + aMaxTxt(a) : ' • السلّم ' + a.min + '–' + a.max) +
       (a.due ? ' • التسليم ' + esc(a.due) : '') + '</div><div class="sub">للمتابعة الداخلية بس — مش بتظهر للأهل، ومفيش ترتيب للطلاب.</div></div>';
-    h += '<div class="panel"><h3>📬 التسليم</h3>' + d.classes.map(function (c) {
+    var dcl = d.classes.slice().sort(function (p, q) { return (p.submitted ? 1 : 0) - (q.submitted ? 1 : 0) || (q.late ? 1 : 0) - (p.late ? 1 : 0); });   // v5.26: اللي ما سلّمش الأول
+    h += '<div class="panel"><h3>📬 التسليم (' + d.classes.filter(function (c) { return c.submitted; }).length + ' من ' + d.classes.length + ' سلّموا)</h3>' + dcl.map(function (c) {
       return '<div class="ur"><span><b>' + esc(c.name) + '</b> <small style="color:var(--m)">' + esc(c.coach) + ' • ' + c.done + ' / ' + c.roster + (c.due ? ' • لحد ' + esc(c.due) : '') + '</small></span><span>' +
         (c.submitted ? '<span class="pill ok">✅ ' + esc(c.submitted.time) + (c.submitted.late ? ' (متأخر)' : '') + '</span>' : (c.late ? '<span class="pill" style="background:#fdecea;color:var(--bad)">⏳ متأخر</span>' : '<span class="pill wait">لسه</span>')) + '</span></div>'; }).join('') + '</div>';
     if (d.program) h += '<div class="panel"><h3>🌐 البرنامج كله</h3>' + asmtStatsHTML(a, d.program) + '</div>';
