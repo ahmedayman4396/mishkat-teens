@@ -2397,14 +2397,18 @@ function certTplEdit(section) {
   loading();
   call('certTpl', [ME.code, section], function (r) {
     var t = JSON.parse(JSON.stringify(r.tpl)), kind = 'mid', timer = null;
-    var sample = { cls: section === 'dar' ? 'مجموعة الدار' : 'T1_السبت_بنات03', section: section, sectionName: section === 'dar' ? 'دار مشكاة' : 'مشكاة Teens', program: section === 'dar' ? 'دار مشكاة – البرنامج الأساسي' : 'Teens – البرنامج الأساسي',
-      term: 'الترم الأول', year: '2026/2027', coach: 'Sohaila Osama', girls: true, tpl: t, vals: { S1: { mid: {}, final: {}, all: {} } },
+    var sample = { cls: 'اسم المجموعة', section: section, sectionName: section === 'dar' ? 'دار مشكاة' : 'مشكاة Teens', program: section === 'dar' ? 'دار مشكاة – البرنامج الأساسي' : 'Teens – البرنامج الأساسي',
+      term: 'الترم الأول', year: '2026/2027', coach: 'أ. اسم المربي', girls: true, tpl: t, vals: { S1: { mid: {}, final: {}, all: {} } },
       sources: { mid: 'تقييم منتصف الترم – Discover', final: 'تقييم نهاية الترم – Discover' }, level: section === 'dar' ? 'أول' : 'السنة الأولى', bands: [90, 80, 70],
       dates: { mid: '2026-11-06', final: '2027-01-15' }, cols: { mid: section === 'dar' ? [{ k: 'a', label: 'جمال مخلوقات الله' }, { k: 'b', label: 'نعم الأعضاء' }, { k: 'c', label: 'آداب الطعام' }] : [{ k: 'a', label: 'معرفة الله' }, { k: 'b', label: 'محبة النبي ﷺ' }, { k: 'c', label: 'الصلة بالقرآن' }, { k: 'd', label: 'تحويل المعرفة إلى عمل' }] } };
-    sample.cols.final = sample.cols.mid;
-    var dt = { content: [{ n: 'ربي: أعرف', l: 'متقدم' }, { n: 'ربي: أعيش', l: 'جيد' }, { n: 'رسولي', l: 'متقدم' }, { n: 'آيتي', l: 'يتطور' }], quran: [{ n: 'الحفظ', l: 'ممتاز' }, { n: 'التجويد', l: 'جيد جدا' }, { n: 'المعاني', l: 'ممتاز' }] };
-    var tb = { quran: { hifz: 'A', tajweed: 'B', maani: 'A', overall: 'A' }, content: { a: 'A', b: 'B', c: 'A', d: 'C' }, contentOverall: 'A' };
-    var stu = { code: 'S1', name: 'سارة محمد أحمد', mid: { quran: 'B', content: 'A', overall: 'A' }, final: { quran: 'A', content: 'A', overall: 'A' }, all: { quran: 'A', content: 'A', overall: 'A' }, det: { mid: dt, final: dt, all: dt }, tab: { mid: tb, final: tb } };
+    // v5.25.1: الخانات من التقييمات الحقيقية؛ لو لسه مفيش تقييم: «بند 1…»
+    var gen = [1, 2, 3, 4].map(function (i) { return { k: 'g' + i, label: 'بند ' + i }; });
+    ['mid', 'final'].forEach(function (k) { var rc = (r.cols || {})[k] || []; sample.cols[k] = rc.length ? rc : ((r.cols || {}).mid || []).length ? r.cols.mid : gen; });
+    var GR = ['A', 'B', 'A', 'C', 'A', 'B'], cg = {}; sample.cols.mid.concat(sample.cols.final).forEach(function (c, i) { cg[c.k] = GR[i % GR.length]; });
+    var LV = ['متقدم', 'جيد', 'متقدم', 'يتطور'];
+    var dt = { content: sample.cols.mid.map(function (c, i) { return { n: c.label, l: LV[i % LV.length] }; }), quran: [{ n: 'الحفظ', l: 'ممتاز' }, { n: 'التجويد', l: 'جيد جدا' }, { n: 'المعاني', l: 'ممتاز' }] };
+    var tb = { quran: { hifz: 'A', tajweed: 'B', maani: 'A', overall: 'A' }, content: cg, contentOverall: 'A' };
+    var stu = { code: 'S1', name: 'اسم الطفل', mid: { quran: 'B', content: 'A', overall: 'A' }, final: { quran: 'A', content: 'A', overall: 'A' }, all: { quran: 'A', content: 'A', overall: 'A' }, det: { mid: dt, final: dt, all: dt }, tab: { mid: tb, final: tb } };
     var inp = function (id, val, ph) { return '<input type="text" data-tf="' + id + '" value="' + esc(val) + '" placeholder="' + esc(ph || '') + '">'; };
     var draw = function () {
       var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>✏️ تصميم شهادة ' + (section === 'dar' ? 'دار مشكاة' : 'Teens') + '</h3>' +
@@ -2412,7 +2416,7 @@ function certTplEdit(section) {
       h += '<div class="panel"><h3>العناوين</h3>' + ['mid', 'final', 'all'].map(function (k) { return '<div class="f"><label class="lb">شهادة ' + CERT_KIND_AR[k] + ':</label>' + inp('titles.' + k, t.titles[k]) + '</div>'; }).join('') +
         '<div class="f"><label class="lb">السطر اللي قبل الاسم:</label>' + inp('intro', t.intro) + '</div><div class="f"><label class="lb">السطر اللي بعد الاسم:</label>' + inp('line', t.line) + '</div>' +
         '<div class="f"><label class="lb">سطر العام الدراسي (فاضي = مش هيظهر):</label>' + inp('yearLine', t.yearLine) + '</div></div>';
-      h += '<div class="panel"><h3>📋 جداول الميد والفاينال</h3><div class="sub">خانات جدول المحتوى بتتاخد من بنود كل تقييم (من «📝 التقييمات»: «📜 في الشهادة» واسمه في الشهادة).</div>' +
+      h += '<div class="panel"><h3>📋 جداول الميد والفاينال</h3><div class="sub">خانات جدول المحتوى بتتاخد من بنود كل تقييم (من «📝 التقييمات»: «📜 في الشهادة» واسمه في الشهادة). المعاينة تحت بخانات ' + (((r.cols || {}).mid || []).length ? 'آخر ميد متسجل' : 'تجريبية لحد ما يتعمل تقييم') + '، والاسم والمربي فيها للتجربة بس.</div>' +
         '<div class="row"><div class="f"><label class="lb">عنوان جدول القرآن:</label>' + inp('tables.quran', (t.tables || {}).quran || '') + '</div><div class="f"><label class="lb">عنوان جدول المحتوى:</label>' + inp('tables.content', (t.tables || {}).content || '') + '</div></div>' +
         '<h3 style="margin-top:10px">سطر البيانات (فوق الجداول)</h3><div class="sub">لحد 4 خانات: الاسم وجنبه القيمة. القيمة ممكن تبقى كلام ثابت أو {المربي} {الاسم} {المستوى} {اليوم} {المجموعة} {البرنامج} — مثلًا المستوى: «{المستوى} – Discover». سيب الاتنين فاضيين علشان تشيل الخانة.</div>' +
         [0, 1, 2, 3].map(function (i) { var it = (t.info || [])[i] || { label: '', value: '' }; if (!t.info) t.info = []; if (!t.info[i]) t.info[i] = it;
