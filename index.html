@@ -645,7 +645,8 @@ function followClass(cls) {
       d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
       return '<div class="ur' + (gone(s) ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : s.status === 'اتنقل' ? ' <small>(اتنقل لـ ' + esc(s.movedTo) + ' من ح' + esc(s.until) + ')</small>' : '') +
         (!gone(s) && !ME.qualityOnly ? ' <button type="button" class="pill" data-a="ren" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '" style="border:none;cursor:pointer;font-family:inherit" title="تعديل الاسم">✏️</button>' : '') +
-        ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center">' +
+        ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' +
+        '<select data-gd="' + esc(s.code) + '" title="ولد / بنت (للشهادة)" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts([{ v: 'ولد', l: '👦 ولد' }, { v: 'بنت', l: '👧 بنت' }], s.gender || '', 'ولد/بنت') + '</select>' +
         '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
         (!gone(s) && !ME.qualityOnly ? ((d.moveTargets || []).length ? '<button class="btn ghost" type="button" data-a="move" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '">نقل</button>' : '') + '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
     if (d.qPlan) { var qp = d.qPlan;   // v5.23: توزيع ساعة القرآن
@@ -675,10 +676,10 @@ function followClass(cls) {
       else if (a === 'xl') excelExport(cls, b);
       else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel|addst|ren|move|mvgo|asgo)$/.test(a)) return;
       else if (a === 'addst') { $('stbox').innerHTML = '<div class="info" style="margin:8px 0"><b>➕ طالب جديد</b><div class="f" style="margin:6px 0 0"><input type="text" id="as-name" placeholder="اسم الطالب بالكامل"></div>' +
-          '<div class="row"><div class="f" style="margin:6px 0 0"><input type="text" id="as-birth" placeholder="تاريخ الميلاد (2014-05-20) أو السنة"></div><div class="f" style="margin:6px 0 0"><select id="as-q">' + opts(d.quranLevels, '', 'مستوى القرآن') + '</select></div></div>' +
+          '<div class="row"><div class="f" style="margin:6px 0 0"><input type="text" id="as-birth" placeholder="تاريخ الميلاد (2014-05-20) أو السنة"></div><div class="f" style="margin:6px 0 0"><select id="as-q">' + opts(d.quranLevels, '', 'مستوى القرآن') + '</select></div><div class="f" style="margin:6px 0 0"><select id="as-g">' + opts([{ v: 'ولد', l: '👦 ولد' }, { v: 'بنت', l: '👧 بنت' }], '', 'ولد/بنت') + '</select></div></div>' +
           '<div class="row" style="align-items:center"><label class="lb" style="flex:0 0 auto;margin:6px 0 0">من حلقة:</label><input type="number" id="as-from" min="1" value="' + ((d.sessions.filter(function (x) { return x.status === 'open'; })[0] || { n: 1 }).n) + '" style="flex:0 0 90px;margin-top:6px"><button class="btn sm" type="button" data-a="asgo" style="margin-top:6px">إضافة ✅</button></div>' +
           '<div class="sub" style="margin:4px 0 0">بيتسجل «مسجل» على طول (من غير «مستني تأكيد»).</div></div>'; $('as-name').focus(); }
-      else if (a === 'asgo') { busy(b, '⏳'); call('addStudent', [ME.code, cls, { name: $('as-name').value, birth: $('as-birth').value, quran: $('as-q').value, from: $('as-from').value }],
+      else if (a === 'asgo') { busy(b, '⏳'); call('addStudent', [ME.code, cls, { name: $('as-name').value, birth: $('as-birth').value, quran: $('as-q').value, gender: $('as-g').value, from: $('as-from').value }],
           function (r) { Sound.play('ok'); toast('اتضاف ' + r.name + ' ✅'); followClass(cls); }, function (er) { busy(b); failed(er); }); }
       else if (a === 'ren') { var nn = prompt('الاسم الصح:', b.dataset.nm); if (!nn || nn.trim() === b.dataset.nm) return;
         call('renameStudent', [ME.code, cls, b.dataset.c, nn.trim()], function () { Sound.play('ok'); toast('اتعدّل الاسم ✅'); followClass(cls); }); }
@@ -709,7 +710,8 @@ function followClass(cls) {
       else if (a === 'vsave') saveVisit(cls);
       else if (a === 'cell') correctCell(cls, b);
     };
-    m.onchange = function (e) { var q = e.target.dataset.q, qc = e.target.dataset.qc; if (q !== undefined) call('setEnrollment', [ME.code, cls, q, 'quran', e.target.value], function () { toast('اتحفظ مستوى القرآن'); }, failed);
+    m.onchange = function (e) { var q = e.target.dataset.q, qc = e.target.dataset.qc, gd = e.target.dataset.gd;
+      if (gd !== undefined) call('setEnrollment', [ME.code, cls, gd, 'gender', e.target.value], function () { toast('اتحفظ ✅'); }, failed); if (q !== undefined) call('setEnrollment', [ME.code, cls, q, 'quran', e.target.value], function () { toast('اتحفظ مستوى القرآن'); }, failed);
       if (qc !== undefined) call('setEnrollment', [ME.code, cls, qc, 'qclass', e.target.value], function () { Sound.play('ok'); toast('اتحفظت حلقة القرآن ✅'); followClass(cls); }, failed); };
   });
 }
@@ -2115,7 +2117,7 @@ function userForm(code) {
     '<div class="row"><div class="f"><label class="lb">الفرع:</label><select id="u-branch">' + opts(d.branches.map(function (b) { return { v: b.code, l: b.name }; }), u.branch, 'كل الفروع') + '</select></div>' +
     '<div class="f"><label class="lb">القسم:</label><select id="u-section">' + opts(d.sections.map(function (s) { return { v: s.code, l: s.name }; }), u.section, 'كل الأقسام') + '</select></div></div>' +
     '<div class="f"><label class="lb">المجموعات (اختياري، مفصولة بفاصلة — فاضي = كل مجموعات النطاق):</label><input type="text" id="u-classes" value="' + esc(u.classes) + '" list="cl-list"><datalist id="cl-list">' + d.classes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
-    '<div class="row"><div class="f"><label class="lb">نوع التعاقد:</label><select id="u-contract">' + opts(['فول تايم', 'بارت تايم', 'متطوع'], u.contract, '—') + '</select></div><div class="f"><label class="lb">الإيميل (للدخول بحساب Google بعدين):</label><input type="email" id="u-email" value="' + esc(u.email) + '"></div></div>' +
+    '<div class="row"><div class="f"><label class="lb">النوع (للشهادة: مربي / مربية):</label><select id="u-gender">' + opts(['ذكر', 'أنثى'], u.gender || '', '—') + '</select></div><div class="f"><label class="lb">نوع التعاقد:</label><select id="u-contract">' + opts(['فول تايم', 'بارت تايم', 'متطوع'], u.contract, '—') + '</select></div></div><div class="row"><div class="f"><label class="lb">الإيميل (للدخول بحساب Google بعدين):</label><input type="email" id="u-email" value="' + esc(u.email) + '"></div></div>' +
     '<div class="row"><button class="btn" type="button" data-a="usave" id="usave">حفظ ✅</button><button class="btn sec" type="button" data-a="ucancel">إلغاء</button></div></div>';
   pinHint(); $('uform').oninput = pinHint; $('uform').onchange = pinHint;
   $('uform').scrollIntoView({ behavior: 'smooth' });
@@ -2123,7 +2125,7 @@ function userForm(code) {
 function saveUser() {
   var roles = [].map.call(document.querySelectorAll('#uform .chk input:checked'), function (i) { return i.value; });
   var data = { code: $('u-code').value.trim(), name: $('u-name').value.trim(), roles: roles, branch: $('u-branch').value, section: $('u-section').value,
-               classes: $('u-classes').value.trim(), contract: $('u-contract').value, email: $('u-email').value.trim(), pin: $('u-pin').value.trim(), isNew: ST.uNew };
+               classes: $('u-classes').value.trim(), contract: $('u-contract').value, gender: $('u-gender').value, email: $('u-email').value.trim(), pin: $('u-pin').value.trim(), isNew: ST.uNew };
   var b = $('usave'); busy(b, 'جاري الحفظ… ⏳');
   call('adminSaveUser', [ME.code, data], function (r) { busy(b); if (r && r.self) { ME.code = r.self; store('mk_code', r.self); } Sound.play('ok'); toast('اتحفظ ✅'); adminHome(); }, function (e) { busy(b); failed(e); });
 }
@@ -2190,9 +2192,9 @@ var CERT_DEF_TPL = { titles: { mid: 'تقييم منتصف الفصل الدرا
   extra: [], note: '', details: { content: false, quran: false }, sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
 var CERT_PH = ['{الاسم}', '{الطفل}', '{المستوى}', '{اليوم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التقييم}', '{التاريخ}'];
 function certFill(str, d, s, kind) {
-  var w = certWords(d.girls), what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
-  var m = { '{الاسم}': s.name, '{الطفل}': d.girls === true ? 'الطفلة' : 'الطفل', '{المستوى}': d.level || '', '{اليوم}': kind === 'all' ? '' : certDateAr((d.dates || {})[kind]), '{الطالب}': w.st, '{أتم}': w.done, '{الفترة}': what, '{الترم}': d.term, '{البرنامج}': d.program, '{القسم}': d.sectionName || '', '{العام}': d.year || '',
-            '{المجموعة}': d.cls, '{المربي}': d.coach || '', '{مربي}': w.coach, '{التاريخ}': new Date().toLocaleDateString('ar-EG-u-nu-latn'),
+  var sg = s.g !== undefined ? s.g : d.girls, w = certWords(sg), cw = certWords(d.coachG !== undefined ? d.coachG : d.girls), what = kind === 'mid' ? 'منتصف ' + d.term : kind === 'final' ? d.term : d.term + ' كاملًا (منتصف ونهاية الترم)';
+  var m = { '{الاسم}': s.name, '{الطفل}': sg === true ? 'الطفلة' : sg === false ? 'الطفل' : 'الطفل/ة', '{المستوى}': d.level || '', '{اليوم}': kind === 'all' ? '' : certDateAr((d.dates || {})[kind]), '{الطالب}': w.st, '{أتم}': w.done, '{الفترة}': what, '{الترم}': d.term, '{البرنامج}': d.program, '{القسم}': d.sectionName || '', '{العام}': d.year || '',
+            '{المجموعة}': d.cls, '{المربي}': d.coach || '', '{مربي}': cw.coach, '{التاريخ}': new Date().toLocaleDateString('ar-EG-u-nu-latn'),
             '{التقييم}': d.sources ? (kind === 'all' ? d.sources.final || d.sources.mid : d.sources[kind]) || '' : '' };
   return String(str || '').replace(/\{[^{}]+\}/g, function (k) { return m.hasOwnProperty(k) ? m[k] : k; }).replace(/\s+/g, ' ').trim();
 }
