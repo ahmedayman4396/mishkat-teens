@@ -2185,7 +2185,7 @@ function certLogo(th) {
 function certWords(g) {
   return g === true ? { st: 'الطالبة', done: 'قد أتمّت', coach: 'مربية' } : g === false ? { st: 'الطالب', done: 'قد أتمّ', coach: 'مربي' } : { st: 'الطالب/ة', done: 'قد أتمّ/ت', coach: 'مربي/ة' };
 }
-var CERT_DEF_TPL = { titles: { mid: 'تقييم منتصف الفصل الدراسي للسنة الأكاديمية {العام}', final: 'تقييم نهاية الفصل الدراسي للسنة الأكاديمية {العام}', all: 'الشهادة الختامية للترم' }, tables: { quran: 'تقييم القرآن', content: 'تقييم المحتوى' }, nameLine: 'اسم {الطفل}: {الاسم}', info: [{ label: 'المستوى', value: '{المستوى}' }, { label: 'اليوم', value: '{اليوم}' }], intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
+var CERT_DEF_TPL = { titles: { mid: 'تقييم منتصف الفصل الدراسي للسنة الأكاديمية {العام}', final: 'تقييم نهاية الفصل الدراسي للسنة الأكاديمية {العام}', all: 'الشهادة الختامية للترم' }, tables: { quran: 'تقييم القرآن', content: 'تقييم المحتوى' }, nameLine: 'اسم {الطالب}: {الاسم}', info: [{ label: 'المستوى', value: '{المستوى}' }, { label: 'اليوم', value: '{اليوم}' }], intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
   yearLine: 'العام الدراسي {العام}', boxes: [{ key: 'quran', label: 'القرآن الكريم', show: true }, { key: 'content', label: 'المنهج', show: true }, { key: 'overall', label: 'التقدير العام', show: true }],
   extra: [], note: '', details: { content: false, quran: false }, sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
 var CERT_PH = ['{الاسم}', '{الطفل}', '{المستوى}', '{اليوم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التقييم}', '{التاريخ}'];
@@ -2291,10 +2291,10 @@ function certDrawTable(d, s, kind) {
     else { x.fillStyle = th.ink; x.fillText(title, W / 2, ty); }
     x.strokeStyle = th.c[2]; x.lineWidth = 4; x.beginPath(); x.moveTo(130, ty + 34); x.lineTo(W - 130, ty + 34); x.stroke();
     // v5.27: اسم الطفل في سطر لوحده تحت العنوان، وبعده سطر البيانات (المستوى | اليوم)
-    var nl = t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, ny = ty + 100, iy = ny;
+    var nl = t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, ny = ty + 110, iy = ny;
     if (nl) { var nf = F(nl), ci = nf.indexOf(':'), nlab = ci > 0 ? nf.slice(0, ci + 1) + ' ' : '', nval = ci > 0 ? nf.slice(ci + 1).trim() : nf; x.textAlign = 'right';
-      fit(nlab + nval, 40, 900, W - 200); var nw = x.measureText(nlab).width, nr = (W + nw + x.measureText(nval).width) / 2;   // v5.27.1: في النص
-      x.fillStyle = th.title; x.fillText(nlab, nr, ny); x.fillStyle = th.ink; x.fillText(nval, nr - nw, ny); iy = ny + 72; }
+      fit(nlab + nval, 54, 900, W - 200); var nw = x.measureText(nlab).width, nr = (W + nw + x.measureText(nval).width) / 2;   // v5.27.1: في النص
+      x.fillStyle = th.title; x.fillText(nlab, nr, ny); x.fillStyle = th.ink; x.fillText(nval, nr - nw, ny); iy = ny + 84; }
     var info = (t.info || CERT_DEF_TPL.info).filter(function (it) { return it && (it.label || it.value); }).map(function (it) { return [F(it.label), F(it.value)]; }), ni = info.length || 1;
     var cw = (W - 200) / Math.max(ni, 3);
     if (!info.length) iy -= 50;
@@ -2439,7 +2439,7 @@ function certTplEdit(section) {
         '<div class="f"><label class="lb">سطر العام الدراسي (فاضي = مش هيظهر):</label>' + inp('yearLine', t.yearLine) + '</div></div>';
       h += '<div class="panel"><h3>📋 جداول الميد والفاينال</h3><div class="sub">خانات جدول المحتوى بتتاخد من بنود كل تقييم (من «📝 التقييمات»: «📜 في الشهادة» واسمه في الشهادة). المعاينة تحت بخانات ' + (((r.cols || {}).mid || []).length ? 'آخر ميد متسجل' : 'تجريبية لحد ما يتعمل تقييم') + '، والاسم والمربي فيها للتجربة بس.</div>' +
         '<div class="row"><div class="f"><label class="lb">عنوان جدول القرآن:</label>' + inp('tables.quran', (t.tables || {}).quran || '') + '</div><div class="f"><label class="lb">عنوان جدول المحتوى:</label>' + inp('tables.content', (t.tables || {}).content || '') + '</div></div>' +
-        '<h3 style="margin-top:10px">سطر اسم الطفل (تحت العنوان)</h3><div class="f">' + inp('nameLine', t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, 'فاضي = مش هيظهر') + '</div><div class="sub">زي: «اسم {الطفل}: {الاسم}» أو «اسم الطالب: {الاسم}».</div>' +
+        '<h3 style="margin-top:10px">سطر اسم الطفل (تحت العنوان)</h3><div class="f">' + inp('nameLine', t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, 'فاضي = مش هيظهر') + '</div><div class="sub">زي: «اسم {الطالب}: {الاسم}» ({الطالب} = الطالب أو الطالبة حسب المجموعة).</div>' +
         '<h3 style="margin-top:10px">سطر البيانات (فوق الجداول)</h3><div class="sub">لحد 4 خانات: الاسم وجنبه القيمة. القيمة ممكن تبقى كلام ثابت أو {المربي} {الاسم} {المستوى} {اليوم} {المجموعة} {البرنامج} — مثلًا المستوى: «{المستوى} – Discover». سيب الاتنين فاضيين علشان تشيل الخانة.</div>' +
         [0, 1, 2, 3].map(function (i) { var it = (t.info || [])[i] || { label: '', value: '' }; if (!t.info) t.info = []; if (!t.info[i]) t.info[i] = it;
           return '<div class="row" style="margin:4px 0"><div class="f" style="margin:0">' + inp('info.' + i + '.label', it.label, 'اسم الخانة') + '</div><div class="f" style="margin:0">' + inp('info.' + i + '.value', it.value, 'القيمة') + '</div></div>'; }).join('') + '</div>';
