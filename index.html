@@ -2147,14 +2147,20 @@ var CERT_THEME = {
   dar: { logo: 'logo-dar.svg', ar: 1000 / 306, c: ['#069ade', '#5ebee9', '#c5cf35', '#d9df77'], ink: '#0b3c5d', title: '#069ade' }
 };
 var CERT_FONT = 'Cairo, "Segoe UI", Tahoma, sans-serif';
+// v5.27: الاسم فوق خط التوقيع بخط إيد (رقعة للعربي، Dancing Script للإنجليزي) ومايل شوية زي التوقيع الحقيقي
+function certSign(x, who, cx, y, maxW) {
+  var ar = /[\u0600-\u06FF]/.test(who), fam = ar ? '"Aref Ruqaa", ' + CERT_FONT : '"Dancing Script", cursive', w = ar ? 700 : 600, sz = ar ? 46 : 52;
+  x.save(); x.font = w + ' ' + sz + 'px ' + fam; while (x.measureText(who).width > maxW && sz > 24) { sz -= 2; x.font = w + ' ' + sz + 'px ' + fam; }
+  x.translate(cx, y); x.rotate(-0.05); x.direction = ar ? 'rtl' : 'ltr'; x.textAlign = 'center'; x.fillStyle = '#1f3a68'; x.fillText(who, 0, 0); x.restore(); x.direction = 'rtl';
+}
 var certImg = {};
 function certFont() {
   if (certFont.p) return certFont.p;
   certFont.p = new Promise(function (ok) {
     try {
-      if (!document.getElementById('cert-font')) { var l = document.createElement('link'); l.id = 'cert-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'; document.head.appendChild(l); }
+      if (!document.getElementById('cert-font')) { var l = document.createElement('link'); l.id = 'cert-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Aref+Ruqaa:wght@700&family=Dancing+Script:wght@600&display=swap'; document.head.appendChild(l); }
       var t = setTimeout(ok, 3500);
-      Promise.all(['400 30px Cairo', '700 30px Cairo', '900 30px Cairo'].map(function (f) { return document.fonts.load(f, 'شهادة'); })).then(function () { clearTimeout(t); ok(); }, function () { clearTimeout(t); ok(); });
+      Promise.all(['400 30px Cairo', '700 30px Cairo', '900 30px Cairo', '700 30px "Aref Ruqaa"', '600 30px "Dancing Script"'].map(function (f) { return document.fonts.load(f, /Dancing/.test(f) ? 'Sign' : 'شهادة'); })).then(function () { clearTimeout(t); ok(); }, function () { clearTimeout(t); ok(); });
     } catch (e) { ok(); }
   });
   return certFont.p;
@@ -2179,7 +2185,7 @@ function certLogo(th) {
 function certWords(g) {
   return g === true ? { st: 'الطالبة', done: 'قد أتمّت', coach: 'مربية' } : g === false ? { st: 'الطالب', done: 'قد أتمّ', coach: 'مربي' } : { st: 'الطالب/ة', done: 'قد أتمّ/ت', coach: 'مربي/ة' };
 }
-var CERT_DEF_TPL = { titles: { mid: 'تقييم منتصف الفصل الدراسي للسنة الأكاديمية {العام}', final: 'تقييم نهاية الفصل الدراسي للسنة الأكاديمية {العام}', all: 'الشهادة الختامية للترم' }, tables: { quran: 'تقييم القرآن', content: 'تقييم المحتوى' }, info: [{ label: '{مربي} الحلقة', value: '{المربي}' }, { label: 'اسم {الطفل}', value: '{الاسم}' }, { label: 'المستوى', value: '{المستوى}' }, { label: 'اليوم', value: '{اليوم}' }], intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
+var CERT_DEF_TPL = { titles: { mid: 'تقييم منتصف الفصل الدراسي للسنة الأكاديمية {العام}', final: 'تقييم نهاية الفصل الدراسي للسنة الأكاديمية {العام}', all: 'الشهادة الختامية للترم' }, tables: { quran: 'تقييم القرآن', content: 'تقييم المحتوى' }, nameLine: 'اسم {الطفل}: {الاسم}', info: [{ label: 'المستوى', value: '{المستوى}' }, { label: 'اليوم', value: '{اليوم}' }], intro: 'تشهد {القسم} بأن {الطالب}', line: '{أتم} {الفترة} — {البرنامج}',
   yearLine: 'العام الدراسي {العام}', boxes: [{ key: 'quran', label: 'القرآن الكريم', show: true }, { key: 'content', label: 'المنهج', show: true }, { key: 'overall', label: 'التقدير العام', show: true }],
   extra: [], note: '', details: { content: false, quran: false }, sig1: { label: '{مربي} المجموعة', name: '{المربي}' }, sig2: { label: 'مسؤول البرنامج', name: '' }, footer: '{التاريخ}' };
 var CERT_PH = ['{الاسم}', '{الطفل}', '{المستوى}', '{اليوم}', '{الطالب}', '{أتم}', '{الفترة}', '{الترم}', '{البرنامج}', '{القسم}', '{العام}', '{المجموعة}', '{المربي}', '{مربي}', '{التقييم}', '{التاريخ}'];
@@ -2250,7 +2256,7 @@ function certDraw(d, s, kind) {
     // التوقيعات
     var sy = H - 190;
     var sig = function (cx, label, who) { x.textAlign = 'center'; x.strokeStyle = '#999'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 190, sy); x.lineTo(cx + 190, sy); x.stroke();
-      if (label) { fit(label, 30, 700, 380); x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); } if (who) { fit(who, 28, 400, 380); x.fillStyle = '#444'; x.fillText(who, cx, sy - 16); } };
+      if (label) { fit(label, 30, 700, 380); x.fillStyle = '#444'; x.fillText(label, cx, sy + 44); } if (who) certSign(x, who, cx, sy - 26, 370); };
     sig(W - 420, F(t.sig1.label), F(t.sig1.name));
     sig(420, F(t.sig2.label), F(t.sig2.name));
     var ft = F(t.footer); if (ft) { x.textAlign = 'center'; fit(ft, 26, 400, 520); x.fillStyle = '#777'; x.fillText(ft, W / 2, sy + 44); }
@@ -2284,13 +2290,18 @@ function certDrawTable(d, s, kind) {
       if (b) { x.fillStyle = th.ink; x.textAlign = 'right'; x.fillText(' ' + b, sx - wa - wy, ty); } }
     else { x.fillStyle = th.ink; x.fillText(title, W / 2, ty); }
     x.strokeStyle = th.c[2]; x.lineWidth = 4; x.beginPath(); x.moveTo(130, ty + 34); x.lineTo(W - 130, ty + 34); x.stroke();
-    // البيانات: مربي الحلقة | اسم الطفل | المستوى | اليوم
+    // v5.27: اسم الطفل في سطر لوحده تحت العنوان، وبعده سطر البيانات (المستوى | اليوم)
+    var nl = t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, ny = ty + 100, iy = ny;
+    if (nl) { var nf = F(nl), ci = nf.indexOf(':'), nlab = ci > 0 ? nf.slice(0, ci + 1) + ' ' : '', nval = ci > 0 ? nf.slice(ci + 1).trim() : nf; x.textAlign = 'right';
+      fit(nlab + nval, 40, 900, W - 200); x.fillStyle = th.title; x.fillText(nlab, W - 100, ny); var nw = x.measureText(nlab).width; x.fillStyle = th.ink; x.fillText(nval, W - 100 - nw, ny); iy = ny + 72; }
     var info = (t.info || CERT_DEF_TPL.info).filter(function (it) { return it && (it.label || it.value); }).map(function (it) { return [F(it.label), F(it.value)]; }), ni = info.length || 1;
-    var iy = ty + 100, cw = (W - 200) / ni;
-    info.forEach(function (it, i) { var cx = W - 100 - cw * i; x.textAlign = 'right';
+    var cw = (W - 200) / Math.max(ni, 3);
+    if (!info.length) iy -= 50;
+    var icx = W - 100;
+    info.forEach(function (it, i) { var cx = icx; x.textAlign = 'right';
       var lab = it[0] ? it[0] + ': ' : ''; fit(lab, 28, 700, cw * 0.55); x.fillStyle = th.title; x.fillText(lab, cx, iy); var lw2 = x.measureText(lab).width;
-      fit(it[1], 26, 700, cw - lw2 - 30); x.fillStyle = th.ink; x.fillText(it[1], cx - lw2, iy);
-      if (i < ni - 1) { x.strokeStyle = th.c[2]; x.lineWidth = 3; x.beginPath(); x.moveTo(cx - cw + 12, iy - 34); x.lineTo(cx - cw + 12, iy + 6); x.stroke(); } });
+      fit(it[1], 26, 700, cw - lw2 - 30); x.fillStyle = th.ink; x.fillText(it[1], cx - lw2, iy); icx = cx - lw2 - x.measureText(it[1]).width - 80;
+      if (i < ni - 1) { var sx2 = cx - lw2 - x.measureText(it[1]).width - 40; x.strokeStyle = th.c[2]; x.lineWidth = 3; x.beginPath(); x.moveTo(sx2, iy - 34); x.lineTo(sx2, iy + 6); x.stroke(); } });
     // الجداول
     var qCols = [['الحفظ', tb.quran.hifz], ['التجويد', tb.quran.tajweed], ['المعاني', tb.quran.maani], ['التقدير', tb.quran.overall]];
     var cCols = cols.map(function (c) { return [c.label, (tb.content || {})[c.k] || '']; });
@@ -2330,7 +2341,7 @@ function certDrawTable(d, s, kind) {
     // التوقيعات
     var sy = H - 130;
     var sig = function (cx, label, who) { if (!label && !who) return; x.textAlign = 'center'; x.strokeStyle = '#bbb'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 170, sy); x.lineTo(cx + 170, sy); x.stroke();
-      if (label) { fit(label, 28, 700, 340); x.fillStyle = '#444'; x.fillText(label, cx, sy + 38); } if (who) { fit(who, 26, 400, 340); x.fillStyle = '#444'; x.fillText(who, cx, sy - 14); } };
+      if (label) { fit(label, 28, 700, 340); x.fillStyle = '#444'; x.fillText(label, cx, sy + 38); } if (who) certSign(x, who, cx, sy - 24, 330); };
     sig(W - 380, F(t.sig1.label), F(t.sig1.name)); sig(380, F(t.sig2.label), F(t.sig2.name));
     return cv;
   });
@@ -2425,6 +2436,7 @@ function certTplEdit(section) {
         '<div class="f"><label class="lb">سطر العام الدراسي (فاضي = مش هيظهر):</label>' + inp('yearLine', t.yearLine) + '</div></div>';
       h += '<div class="panel"><h3>📋 جداول الميد والفاينال</h3><div class="sub">خانات جدول المحتوى بتتاخد من بنود كل تقييم (من «📝 التقييمات»: «📜 في الشهادة» واسمه في الشهادة). المعاينة تحت بخانات ' + (((r.cols || {}).mid || []).length ? 'آخر ميد متسجل' : 'تجريبية لحد ما يتعمل تقييم') + '، والاسم والمربي فيها للتجربة بس.</div>' +
         '<div class="row"><div class="f"><label class="lb">عنوان جدول القرآن:</label>' + inp('tables.quran', (t.tables || {}).quran || '') + '</div><div class="f"><label class="lb">عنوان جدول المحتوى:</label>' + inp('tables.content', (t.tables || {}).content || '') + '</div></div>' +
+        '<h3 style="margin-top:10px">سطر اسم الطفل (تحت العنوان)</h3><div class="f">' + inp('nameLine', t.nameLine == null ? CERT_DEF_TPL.nameLine : t.nameLine, 'فاضي = مش هيظهر') + '</div><div class="sub">زي: «اسم {الطفل}: {الاسم}» أو «اسم الطالب: {الاسم}».</div>' +
         '<h3 style="margin-top:10px">سطر البيانات (فوق الجداول)</h3><div class="sub">لحد 4 خانات: الاسم وجنبه القيمة. القيمة ممكن تبقى كلام ثابت أو {المربي} {الاسم} {المستوى} {اليوم} {المجموعة} {البرنامج} — مثلًا المستوى: «{المستوى} – Discover». سيب الاتنين فاضيين علشان تشيل الخانة.</div>' +
         [0, 1, 2, 3].map(function (i) { var it = (t.info || [])[i] || { label: '', value: '' }; if (!t.info) t.info = []; if (!t.info[i]) t.info[i] = it;
           return '<div class="row" style="margin:4px 0"><div class="f" style="margin:0">' + inp('info.' + i + '.label', it.label, 'اسم الخانة') + '</div><div class="f" style="margin:0">' + inp('info.' + i + '.value', it.value, 'القيمة') + '</div></div>'; }).join('') + '</div>';
@@ -2480,6 +2492,8 @@ function certClass(cls) {
         '<div class="sub">المنهج من: ' + esc(kind === 'all' ? [d.sources.mid, d.sources.final].filter(String).join(' + ') || '—' : d.sources[kind] || '— (لسه مفيش تقييم ' + (kind === 'mid' ? 'منتصف' : 'نهائي') + ')') +
           ' • القرآن من اختبار ' + (kind === 'mid' ? 'الميد' : kind === 'final' ? 'الفاينال' : 'الميد والفاينال') + '</div>' +
         '<div class="sub">التقدير: A من ' + d.bands[0] + '% • B من ' + d.bands[1] + '% • C من ' + d.bands[2] + '% • D أقل • N مفيش درجة</div>' +
+        (kind !== 'all' ? '<div class="row" style="align-items:center;margin:6px 0"><label class="lb" style="flex:0 0 auto;margin:0">📅 تاريخ الشهادة:</label><input type="date" id="cert-date" value="' + esc((d.dateSet || {})[kind] || '') + '" style="flex:0 1 190px"><button class="btn sm sec" type="button" id="cert-date-save" style="flex:0 0 auto">حفظ</button>' +
+          ((d.dateSet || {})[kind] ? '<button class="btn sm ghost" type="button" id="cert-date-auto" style="flex:0 0 auto">رجّعه تلقائي</button>' : '') + '</div><div class="sub" style="margin-top:0">' + ((d.dateSet || {})[kind] ? 'متحدد بإيدك: ' + esc(certDateAr(d.dateSet[kind])) + ' • التلقائي: ' : 'تلقائي (يوم حلقة التقييم للمجموعة دي): ') + esc((d.dateAuto || {})[kind] ? certDateAr(d.dateAuto[kind]) : '—') + '</div>' : '') +
         '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button></div>';
       h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th>' + fs.map(function (f) { return '<th>' + esc(f.label) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
         d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
@@ -2496,6 +2510,8 @@ function certClass(cls) {
     mm.onclick = function (e) { var b;
       if (e.target.closest('[data-b]')) { certHome(); return; }
       if ((b = e.target.closest('[data-ck]'))) { kind = ST.certKind = b.dataset.ck; dirty = {}; draw(); return; }
+      if (e.target.id === 'cert-date-save' || e.target.id === 'cert-date-auto') { var db = e.target, dv = db.id === 'cert-date-auto' ? '' : $('cert-date').value; busy(db, '…');   // v5.27
+        call('certDateSave', [ME.code, d.cls, kind, dv], function () { d.dateSet = d.dateSet || {}; d.dateSet[kind] = dv; d.dates[kind] = dv || (d.dateAuto || {})[kind] || ''; Sound.play('ok'); toast('اتحفظ التاريخ ✅'); draw(); }, function (er) { busy(db); failed(er); }); return; }
       if (e.target.id === 'xv-save') { var btn = e.target, rows = Object.keys(dirty).map(function (k) { var p = k.split('|'); return { student: p[0], field: p[1], value: dirty[k] }; }); busy(btn, '…');
         call('certValsSave', [ME.code, d.cls, kind, rows], function () { rows.forEach(function (r) { var a = d.vals[r.student] = d.vals[r.student] || {}; (a[kind] = a[kind] || {})[r.field] = r.value; }); dirty = {}; busy(btn); Sound.play('ok'); toast('اتحفظ ✅'); }, function (er) { busy(btn); failed(er); });
         return; }
