@@ -82,6 +82,8 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 4px
 input.bad{border-color:var(--bad)!important;background:#fdecea!important}
 .ur{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--ln);font-size:14px}.ur.off{opacity:.5}
 @media print{.top,.tabs,.back,button,input[type=month]{display:none!important}body{background:#fff}.panel{box-shadow:none;border:1px solid #ddd}}
+#swr-bar{position:fixed;top:8px;left:50%;transform:translate(-50%,-60px);z-index:60;background:var(--c,#007baf);color:#fff;border-radius:20px;padding:6px 16px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.18);transition:transform .25s;pointer-events:none}
+#swr-bar.show{transform:translate(-50%,0)}#swr-bar.fresh{pointer-events:auto;cursor:pointer;background:#2e7d32}
 </style>
 </head>
 <body>
@@ -144,11 +146,52 @@ function googleSignIn(after) {
 }
 function googleBtn(label) { return '<button class="btn sm" type="button" data-google="1" style="flex:0 0 auto">🔐 ' + (label || 'ادخل بحساب Google') + '</button>'; }
 document.addEventListener('click', function (e) { if (e.target.closest('[data-google]')) { e.stopPropagation(); googleSignIn(); } }, true);
+// v5.30: السرعة — الشاشات اللي بتعرض بس بتظهر فورًا من آخر نسخة على الجهاز ده، وبتتحدّث لوحدها من ورا.
+// النسخة دي بتتمسح عند الخروج، وبعد 12 ساعة، وبعد أي حفظ/تعديل (علشان ما تشوفش حاجة قديمة بعد ما عدّلت).
+var SWR = { login: 1, followDashboard: 1, asmtHome: 1, certClasses: 1, quranHome: 1, progress: 1, coordBoard: 1, qualityBoard: 1, casesHome: 1, meetHome: 1, myTodo: 1, followClass: 1, myWarns: 1, myMeetings: 1, myQuranEvals: 1, classSubs: 1, classWarns: 1 };
+var SWR_TTL = 12 * 3600 * 1000, SWR_PFX = 'mk_c|', NAV = 0, TIMES = {};
+var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk)/;
+document.addEventListener('input', function () { NAV++; }, true);
+document.addEventListener('click', function (e) { if (!e.target.closest('#swr-bar')) NAV++; }, true);
+function swrKey(fn, args) { return SWR_PFX + fn + '|' + JSON.stringify(args); }
+function swrGet(k) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v && Date.now() - v.t < SWR_TTL ? v : null; } catch (e) { return null; } }
+function swrPut(k, d, s) { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), d: d, s: s })); } catch (e) { swrClear(); } }
+function swrClear() { try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf(SWR_PFX) === 0) localStorage.removeItem(k); }); } catch (e) {} }
+function swrBar(on, fresh) {
+  var b = $('swr-bar');
+  if (!b) { b = document.createElement('div'); b.id = 'swr-bar'; document.body.appendChild(b); }
+  b.className = on ? 'show' + (fresh ? ' fresh' : '') : '';
+  b.innerHTML = fresh ? '🔄 فيه بيانات أحدث — دوس هنا تعرضها' : '⏳ بيتحدّث…';
+  b.onclick = fresh ? function () { swrBar(false); fresh(); } : null;
+}
+// v5.30: قياس السرعة على الجهاز ده (من ساعة ما فتحت البوابة): الوقت الكلي، ووقت السيرفر لوحده
+function speedPanel() {
+  var ks = Object.keys(TIMES).sort(function (a, b) { return TIMES[b].sum / TIMES[b].n - TIMES[a].sum / TIMES[a].n; });
+  var sec = function (ms) { return (ms / 1000).toFixed(1); };
+  return '<div class="panel"><h3>⏱️ سرعة الشاشات (الجهاز ده)</h3><div class="sub">من ساعة ما فتحت البوابة. «السيرفر» = وقت جوجل في تجهيز البيانات، والباقي إنترنت وتشغيل السكريبت.</div>' +
+    (ks.length ? '<div style="overflow-x:auto"><table><tr><th>الطلب</th><th>مرات</th><th>متوسط (ث)</th><th>السيرفر (ث)</th><th>أبطأ (ث)</th></tr>' + ks.map(function (k) { var t = TIMES[k];
+      return '<tr><td>' + esc(k) + '</td><td>' + t.n + '</td><td>' + sec(t.sum / t.n) + '</td><td>' + sec(t.srv / t.n) + '</td><td>' + sec(t.max) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="empty">لسه مفيش قياسات.</div>') + '</div>';
+}
+function timeOf(fn, ms, srv) { var t = TIMES[fn] || (TIMES[fn] = { n: 0, sum: 0, srv: 0, max: 0 }); t.n++; t.sum += ms; t.srv += srv || 0; t.max = Math.max(t.max, ms); }
 function call(fn, args, ok, fail) {
+  var t0 = Date.now(), key = SWR[fn] ? swrKey(fn, args) : null, hit = key && swrGet(key), nav = -1, live = false;
+  if (hit) { try { ok(hit.d); } catch (e) {} nav = NAV; swrBar(true); }
   fetch(API_URL, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK }) })
     .then(function (r) { return r.json(); })
-    .then(function (r) { if (r.ok) ok(r.data); else (fail || failed)(new Error(r.error)); })
-    .catch(function () { (fail || failed)(new Error('تعذر الاتصال، اتأكد من الإنترنت وجرب تاني')); });
+    .then(function (r) {
+      live = true; timeOf(fn, Date.now() - t0, r.ms);
+      if (hit) swrBar(false);
+      if (!r.ok) { if (key) try { localStorage.removeItem(key); } catch (e) {} (fail || failed)(new Error(r.error)); return; }
+      if (WRITE_RE.test(fn)) swrClear();
+      if (!key) { ok(r.data); return; }
+      var s = JSON.stringify(r.data);
+      swrPut(key, r.data, s);
+      if (!hit) { ok(r.data); return; }
+      if (hit.s === s) return;   // نفس اللي ظاهر
+      if (NAV === nav) { var y = window.scrollY; ok(r.data); window.scrollTo(0, y); }   // لسه ما لمستش حاجة: نحدّث في مكانه
+      else swrBar(true, function () { ok(r.data); });
+    })
+    .catch(function () { if (hit) { swrBar(false); if (!live) { toast('📴 بتشوف آخر نسخة محفوظة — مفيش إنترنت'); return; } } (fail || failed)(new Error('تعذر الاتصال، اتأكد من الإنترنت وجرب تاني')); });
 }
 function failed(e) {
   Sound.play('err');
@@ -196,7 +239,7 @@ function login(silent) {
   var b = $('login-btn'); busy(b, 'جاري التحقق… ⏳'); msg.classList.remove('show');
   call('login', [code], function (r) {
     busy(b);
-    if (!r.success) { store('mk_code', null); msg.textContent = r.message; msg.classList.add('show'); Sound.play('err'); return; }
+    if (!r.success) { if (ME) logout(); store('mk_code', null); msg.textContent = r.message; msg.classList.add('show'); Sound.play('err'); return; }
     ME = r; ME.code = code; store('mk_code', code); Sound.play('ok');
     $('hello').textContent = 'أهلاً، ' + r.name;
     $('v-login').classList.add('hidden'); $('v-app').classList.remove('hidden');
@@ -207,7 +250,7 @@ function login(silent) {
     go(r.views[0]);
   }, function (e) { busy(b); msg.textContent = e.message; msg.classList.add('show'); Sound.play('err'); });
 }
-function logout() { ME = null; store('mk_code', null); TOK = ''; store('mk_tok', null); $('code').value = ''; $('v-app').classList.add('hidden'); $('v-login').classList.remove('hidden'); }
+function logout() { ME = null; swrClear(); store('mk_code', null); TOK = ''; store('mk_tok', null); $('code').value = ''; $('v-app').classList.add('hidden'); $('v-login').classList.remove('hidden'); }
 function go(v) {
   VIEW = v;
   [].forEach.call($('tabs').children, function (b) { b.classList.toggle('on', b.dataset.v === v); });
@@ -645,7 +688,8 @@ function followClass(cls) {
       d.students.filter(function (s) { return s.status !== 'مرفوض'; }).map(function (s) {
       return '<div class="ur' + (gone(s) ? ' off' : '') + '"><span><a href="#" data-a="report" data-c="' + esc(s.code) + '">' + esc(s.name) + '</a>' + (s.status === 'منسحب' ? ' <small>(انسحب من ح' + esc(s.until) + ')</small>' : s.status === 'اتنقل' ? ' <small>(اتنقل لـ ' + esc(s.movedTo) + ' من ح' + esc(s.until) + ')</small>' : '') +
         (!gone(s) && !ME.qualityOnly ? ' <button type="button" class="pill" data-a="ren" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '" style="border:none;cursor:pointer;font-family:inherit" title="تعديل الاسم">✏️</button>' : '') +
-        ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' +
+        ' <button type="button" class="pill ' + (s.age ? 'c' : 'wait') + '" data-a="birth" data-c="' + esc(s.code) + '" data-b="' + esc(s.birth) + '" style="border:none;cursor:pointer;font-family:inherit">👶 ' + (s.age ? s.age + ' سنين' : 'سجّل السن') + '</button>' +
+        (ME.qualityOnly ? '' : ' <button type="button" class="pill ' + (s.pemail ? 'c' : 'wait') + '" data-a="pmail" data-c="' + esc(s.code) + '" data-b="' + esc(s.pemail || '') + '" title="' + esc(s.pemail || 'إيميل ولي الأمر') + '" style="border:none;cursor:pointer;font-family:inherit">✉️ ' + (s.pemail ? 'الإيميل' : 'إيميل ولي الأمر') + '</button>') + '</span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' +
         '<select data-gd="' + esc(s.code) + '" title="ولد / بنت (للشهادة)" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts([{ v: 'ولد', l: '👦 ولد' }, { v: 'بنت', l: '👧 بنت' }], s.gender || '', 'ولد/بنت') + '</select>' +
         '<select data-q="' + esc(s.code) + '" style="width:auto;padding:5px;font-size:13px"' + (ME.qualityOnly ? ' disabled' : '') + '>' + opts(d.quranLevels, s.quran, 'مستوى القرآن') + '</select>' +
         (!gone(s) && !ME.qualityOnly ? ((d.moveTargets || []).length ? '<button class="btn ghost" type="button" data-a="move" data-c="' + esc(s.code) + '" data-nm="' + esc(s.name) + '">نقل</button>' : '') + '<button class="btn ghost" type="button" data-a="withdraw" data-c="' + esc(s.code) + '">انسحاب</button>' : '') + '</span></div>'; }).join('') + '</div>';
@@ -697,6 +741,8 @@ function followClass(cls) {
       else if (a === 'wcancel') { var why = prompt('سبب إلغاء الإنذار؟'); if (why == null) return; call('cancelWarn', [ME.code, b.dataset.id, why], function () { toast('اتلغى'); warnBox(cls); }); }
       else if (a === 'wsave') saveWarnForm(cls, b);
       else if (a === 'wlv') { [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); }
+      else if (a === 'pmail') { var pm = prompt('إيميل ولي الأمر (لو أكتر من واحد افصلهم بـ ;) — فاضي = يتمسح:', b.dataset.b || ''); if (pm == null) return;   // v5.29
+        call('setEnrollment', [ME.code, cls, b.dataset.c, 'pemail', pm.trim()], function () { Sound.play('ok'); toast('اتحفظ ✅'); followClass(cls); }, failed); }
       else if (a === 'birth') { var v = prompt('تاريخ الميلاد (زي 2019-05-14) أو السنة بس:', b.dataset.b || ''); if (v == null) return;
         call('setEnrollment', [ME.code, cls, b.dataset.c, 'birth', v.trim()], function (r) { Sound.play('ok'); toast(r.age ? 'اتسجل — ' + r.age + ' سنين' : 'اتمسح'); followClass(cls); }); }
       else if (a === 'sess') followSession(cls, Number(b.dataset.n));
@@ -1323,12 +1369,14 @@ function quranHome() {
     h += '<div class="panel"><h3>👥 المجموعات</h3>' + d.classes.map(function (c) { return '<div class="cls" data-qc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') +
       ' • ' + c.students + ' طالب • دعم ' + c.support + (c.supportWeeks.length ? ' • أسابيع الدعم: ' + c.supportWeeks.join('، ') : ' • <span class="pill wait">مفيش أسابيع دعم محددة</span>') + '</div></div>'; }).join('') + '</div>';
     if (d.canPlan) h += '<div class="panel"><button class="btn sec" type="button" data-all="1">📋 كل خطط القرآن</button></div>';
-    h = '<div class="panel"><h3>📝 نماذج قسم القرآن</h3><div class="row"><button class="btn" type="button" data-qf="maqraa">🕌 تقييم مربي المقرأة</button><button class="btn" type="button" data-qf="qvisit">🏫 زيارة فصل القرآن</button></div></div>' + h;
+    h = '<div class="panel"><h3>📝 نماذج قسم القرآن</h3><div class="row"><button class="btn" type="button" data-qf="maqraa">🕌 تقييم مربي المقرأة</button><button class="btn" type="button" data-qf="qvisit">🏫 زيارة فصل القرآن</button></div>' +
+      '<div class="row" style="margin-top:8px"><button class="btn sec" type="button" data-gbq="1">🔤 درجات القرآن بالحروف — كل المجموعات</button></div></div>' + h;
     h += '<div id="cbox"></div>';
     main(h);
     $('main').onclick = function (e) {
       var q = e.target.closest('[data-qc]'); if (q) { quranClassView(q.dataset.qc); return; }
       var qf = e.target.closest('[data-qf]'); if (qf) { qformView(qf.dataset.qf); return; }
+      if (e.target.closest('[data-gbq]')) { gradeBoardView(quranHome); return; }
       var p = e.target.closest('[data-plan]'); if (p) { caseView('quran', p.dataset.plan, quranHome); return; }
       var n = e.target.closest('[data-new]'); if (n) { ensureMeta('quran', function () { caseForm('quran', null, { subjectLabel: n.dataset.nm }); }); return; }
       if (e.target.closest('[data-all]')) caseListView('quran', 'open', quranHome);
@@ -2077,7 +2125,7 @@ function adminHome() {
     ST.ad = d;
     main('<div class="panel"><div class="row"><h3 style="margin:0">👥 المستخدمين (' + d.users.length + ')</h3><button class="btn sm" type="button" data-a="new" style="flex:0 0 auto">➕ مستخدم جديد</button></div>' +
       '<div class="f" style="margin-top:10px"><input type="text" id="uq" placeholder="بحث بالاسم أو الكود أو الدور"></div><div id="ulist"></div></div><div id="uform"></div>' +
-      '<div id="terms-box"></div>');
+      '<div id="terms-box"></div>' + speedPanel());
     termsPanel();
     userList('');
     var m = $('main');
@@ -2396,15 +2444,110 @@ function saveBlob(blob, name) {
   setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 4000);
 }
 function certFile(s, kind) { return (s.name + ' - ' + CERT_KINDS[kind].t).replace(/[\\/:*?"<>|]/g, '') + '.pdf'; }
+// v5.29: 📧 تجهيز الإرسال — ZIP فيه شهادة PDF لكل طفل + «قائمة_الإرسال.xlsx» (الإيميل، الاسم، الملف، العنوان، النص) لـ Power Automate
+function certMailText(d, s, kind) {
+  var w = certWords(s.g !== undefined ? s.g : d.girls), what = kind === 'mid' ? 'تقييم منتصف ' + d.term : kind === 'final' ? 'تقييم نهاية ' + d.term : 'الشهادة الختامية لـ ' + d.term;
+  return { subject: CERT_KINDS[kind].t + ' — ' + s.name,
+           body: 'السلام عليكم ورحمة الله وبركاته،<br><br>ولي أمر ' + w.st + ' ' + s.name + ' الكريم،<br>نرفق لحضرتكم شهادة ' + what + (d.year ? ' للعام الأكاديمي ' + d.year : '') + ' — ' + (d.program || '') + '، مع الملفات المرفقة.<br><br>مع خالص التحية،<br>' + (d.sectionName || 'دار مشكاة') };
+}
+function certMailPack(ds, kind, btn, label) {
+  var jobs = []; ds.forEach(function (d) { d.students.forEach(function (s) { if (certHas(s, kind)) jobs.push({ d: d, s: s }); }); });
+  if (!jobs.length) { toast('مفيش شهادات جاهزة'); return; }
+  var files = [], rows = [], i = 0; busy(btn, 'بيتجهز 0 / ' + jobs.length);
+  var next = function () {
+    if (i >= jobs.length) {
+      loadXlsx().then(function (X) {
+        var ws = X.utils.json_to_sheet(rows, { header: ['Email', 'Student', 'Group', 'File', 'Subject', 'Body', 'Note'] }); ws['!cols'] = [{ wch: 34 }, { wch: 28 }, { wch: 22 }, { wch: 40 }, { wch: 40 }, { wch: 60 }, { wch: 22 }];
+        var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Send'); var xb = X.write(wb, { type: 'array', bookType: 'xlsx' });
+        files.push({ name: 'قائمة_الإرسال.xlsx', data: new Uint8Array(xb) });
+        saveBlob(certZip(files), ('إرسال ' + CERT_KINDS[kind].short + ' - ' + label).replace(/[\\/:*?"<>|]/g, '') + '.zip'); busy(btn); Sound.play('ok');
+        var miss = rows.filter(function (r) { return !r.Email; }).length;
+        toast('اتجهز ' + (files.length - 1) + ' شهادة' + (miss ? ' — ' + miss + ' من غير إيميل' : ' ✅'));
+      }, function (e) { busy(btn); failed(e); });
+      return;
+    }
+    var j = jobs[i++], name = (j.s.code + ' - ' + certFile(j.s, kind)).replace(/[\\/:*?"<>|]/g, ''), mt = certMailText(j.d, j.s, kind);
+    certDraw(j.d, j.s, kind).then(function (cv) { return certPdf(cv).arrayBuffer(); }).then(function (ab) {
+      files.push({ name: name, data: new Uint8Array(ab) });
+      rows.push({ Email: j.s.pemail || '', Student: j.s.name, Group: j.d.cls, File: name, Subject: mt.subject, Body: mt.body, Note: j.s.pemail ? '' : 'مفيش إيميل — مش هيتبعت' });
+      busy(btn, 'بيتجهز ' + i + ' / ' + jobs.length); setTimeout(next, 0);
+    }, function () { busy(btn); toast('حصلت مشكلة في الرسم'); });
+  };
+  next();
+}
 
 // ---------- الشاشات ----------
+// ======================================================================
+// v5.30: 🔤 الدرجات بالحروف — كل المجموعات مرة واحدة، مجمّعة بالحرف (مش ترتيب)
+// قسم القرآن: القرآن بس • المنسقين والإدارة: القرآن والمحتوى
+// ======================================================================
+var GB_LET = [['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'D'], ['N', 'N — مفيش درجة (غياب)'], ['', 'لسه ما اتقيّمش']];
+function gradeBoardView(back) {
+  var q = ST.gb = ST.gb || { kind: 'mid', part: 'q', branch: '', by: 'cls', s: '' };
+  loading();
+  call('gradeBoard', [ME.code, q.kind], function (d) {
+    if (d.quranOnly) q.part = 'q';
+    var branches = [], seen = {}; d.rows.forEach(function (r) { if (r.branch && !seen[r.branch]) { seen[r.branch] = 1; branches.push(r.branch); } });
+    var draw = function () {
+      var key = q.part, rows = d.rows.filter(function (r) { return (!q.branch || r.branch === q.branch) && (!q.s || r.name.indexOf(q.s) !== -1 || r.cls.indexOf(q.s) !== -1); });
+      var grpOf = function (r) { return q.part === 'q' && q.by === 'qcls' ? r.qcls : r.cls; };
+      var by = {}; GB_LET.forEach(function (l) { by[l[0]] = []; });
+      rows.forEach(function (r) { var v = r[key] || ''; (by[v] || by['']).push(r); });
+      Object.keys(by).forEach(function (k) { by[k].sort(function (a, b) { return grpOf(a).localeCompare(grpOf(b), 'ar') || a.name.localeCompare(b.name, 'ar'); }); });
+      var who = function (r) { return q.part === 'q' && q.by === 'qcls' ? esc(r.qcoach || '—') : esc(r.coach || '—'); };
+      var h = '<div class="row" style="margin:6px 0">' + GB_LET.map(function (l) { return by[l[0]].length ? '<span class="pill ' + (l[0] === 'A' || l[0] === 'B' ? 'ok' : l[0] === '' ? '' : 'wait') + '">' + esc(l[0] || 'لسه') + ': ' + by[l[0]].length + '</span>' : ''; }).join('') + '</div>';
+      h += GB_LET.map(function (l) { var xs = by[l[0]]; if (!xs.length) return '';
+        return '<div class="panel gb"><h3>' + esc(l[1]) + ' <small style="color:var(--m)">(' + xs.length + ')</small></h3><div style="overflow-x:auto"><table><tr><th>الاسم</th><th>' + (q.part === 'q' && q.by === 'qcls' ? 'حلقة القرآن' : 'المجموعة') + '</th><th>' + (q.part === 'q' && q.by === 'qcls' ? 'مربي القرآن' : 'المربي') + '</th>' + (q.part === 'q' ? '<th>المستوى</th>' : '') + '</tr>' +
+          xs.map(function (r) { return '<tr><td style="text-align:right">' + esc(r.name) + '</td><td>' + esc(grpOf(r)) + '</td><td>' + who(r) + '</td>' + (q.part === 'q' ? '<td>' + esc(r.level || '—') + '</td>' : '') + '</tr>'; }).join('') + '</table></div></div>'; }).join('');
+      if (!rows.length) h = '<div class="panel"><div class="empty">مفيش أطفال في الاختيار ده.</div></div>';
+      $('gb-res').innerHTML = h;
+    };
+    var none = d.groups.filter(function (g) { return !(q.kind === 'final' ? g.final : q.kind === 'mid' ? g.mid : (g.mid || g.final)); });
+    var h = (back ? '<button class="back" type="button" data-a="back">→ رجوع</button>' : '') +
+      '<div class="panel"><h3>🔤 الدرجات بالحروف — كل المجموعات</h3><div class="sub">الأطفال متجمّعين حسب الحرف: A من ' + d.bands[0] + '% • B من ' + d.bands[1] + '% • C من ' + d.bands[2] + '% • D أقل • N غياب. جوه كل حرف: بالمجموعة وبعدين بالاسم — مش ترتيب للطلاب. ' + (d.quranOnly ? 'إنت شايف درجات القرآن بس.' : '') + ' للمتابعة الداخلية بس.</div>' +
+      '<div class="row" style="margin-top:8px"><select id="gb-kind">' + ['mid', 'final', 'all'].map(function (k) { return '<option value="' + k + '"' + (q.kind === k ? ' selected' : '') + '>' + CERT_KINDS[k].short + '</option>'; }).join('') + '</select>' +
+      (d.quranOnly ? '' : '<select id="gb-part"><option value="q"' + (q.part === 'q' ? ' selected' : '') + '>📖 القرآن</option><option value="c"' + (q.part === 'c' ? ' selected' : '') + '>📘 المحتوى</option></select>') +
+      (branches.length > 1 ? '<select id="gb-br"><option value="">كل الفروع</option>' + branches.map(function (b) { return '<option' + (q.branch === b ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select>' : '') +
+      '<select id="gb-by"' + (q.part === 'q' ? '' : ' style="display:none"') + '><option value="cls"' + (q.by === 'cls' ? ' selected' : '') + '>حسب مجموعة الطفل</option><option value="qcls"' + (q.by === 'qcls' ? ' selected' : '') + '>حسب حلقة القرآن</option></select></div>' +
+      '<div class="row" style="margin-top:6px"><input type="text" id="gb-s" placeholder="دوّر باسم طفل أو مجموعة" value="' + esc(q.s) + '"><button class="btn sec sm" type="button" id="gb-x" style="flex:0 0 auto">⬇️ Excel</button></div>' +
+      (none.length ? '<div class="sub" style="margin-top:6px">⏳ مفيش تقييم ' + esc(CERT_KINDS[q.kind].short) + ' لسه لـ: ' + none.map(function (g) { return esc(g.name); }).join('، ') + '</div>' : '') + '</div><div id="gb-res"></div>';
+    main(h); draw();
+    var m = $('main');
+    m.onchange = function (e) { var id = e.target.id;
+      if (id === 'gb-kind') { q.kind = e.target.value; gradeBoardView(back); return; }
+      if (id === 'gb-part') { q.part = e.target.value; $('gb-by').style.display = q.part === 'q' ? '' : 'none'; draw(); return; }
+      if (id === 'gb-br') { q.branch = e.target.value; draw(); return; }
+      if (id === 'gb-by') { q.by = e.target.value; draw(); } };
+    m.oninput = function (e) { if (e.target.id === 'gb-s') { q.s = e.target.value.trim(); draw(); } };
+    m.onclick = function (e) {
+      if (e.target.closest('[data-a="back"]')) { back(); return; }
+      if (e.target.id === 'gb-x') { var b = e.target; busy(b, '⏳');
+        loadXlsx().then(function (X) {
+          var wb = X.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+          var parts = d.quranOnly ? [['q', 'القرآن']] : [['q', 'القرآن'], ['c', 'المحتوى']];
+          parts.forEach(function (pt) {
+            var aoa = [['الحرف', 'الاسم', 'المجموعة', 'المربي', 'الفرع'].concat(pt[0] === 'q' ? ['المستوى', 'حلقة القرآن', 'مربي القرآن'] : [])];
+            var rs = d.rows.filter(function (r) { return !q.branch || r.branch === q.branch; }).slice().sort(function (a, b) {
+              var ia = GB_LET.map(function (l) { return l[0]; }).indexOf(a[pt[0]] || ''), ib = GB_LET.map(function (l) { return l[0]; }).indexOf(b[pt[0]] || '');
+              return ia - ib || a.cls.localeCompare(b.cls, 'ar') || a.name.localeCompare(b.name, 'ar'); });
+            rs.forEach(function (r) { aoa.push([r[pt[0]] || 'لسه', r.name, r.cls, r.coach, r.branch].concat(pt[0] === 'q' ? [r.level, r.qcls, r.qcoach] : [])); });
+            var ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = aoa[0].map(function () { return { wch: 18 }; }); ws['!autofilter'] = { ref: ws['!ref'] };
+            X.utils.book_append_sheet(wb, ws, pt[1]); });
+          X.writeFile(wb, 'الدرجات بالحروف - ' + CERT_KINDS[q.kind].short + '.xlsx'); busy(b); Sound.play('ok'); toast('اتحمّل ✅');
+        }, function (er) { busy(b); failed(er); }); } };
+  });
+}
 function certHome() {
   loading();
   call('certClasses', [ME.code], function (list) {
     var by = {}; list.forEach(function (c) { (by[c.program] = by[c.program] || []).push(c); });
     var admin = (ME.roles || []).indexOf('أدمن') !== -1;
     var h = '<div class="panel"><h3>📜 الشهادات</h3><div class="sub">لكل طالب: شهادة الميد وشهادة الفاينال (بجدول القرآن وجدول المحتوى)، والشهادة الختامية للترم (من الميد والفاينال). التقدير بالحروف: A من 90% • B من 80% • C من 70% • D أقل • N مفيش درجة. اللي غاب عن الامتحان كله ما بتطلعلوش شهادة لحد ما يمتحن (المربي يسجّله في نفس التقييم بعدين).</div>' +
+      '<div class="row" style="margin-top:8px"><button class="btn" type="button" data-gb="1">🔤 الدرجات بالحروف — كل المجموعات</button></div>' +
       (admin ? '<div class="row" style="margin-top:8px"><button class="btn sec" type="button" data-tp="teens">✏️ تصميم شهادة Teens</button><button class="btn sec" type="button" data-tp="dar">✏️ تصميم شهادة الدار</button></div>' : '') + '</div>';
+    h += list.length ? '<div class="panel"><h3>📧 إرسال الشهادات لأولياء الأمور</h3><div class="sub">1) سجّل الإيميلات: من صفحة المجموعة (✉️ جنب كل طفل)، أو الزق هنا عمودين من Excel: <b>اسم الطفل</b> و<b>الإيميل</b>.<br>2) جهّز ملف الإرسال (الشهادات + قائمة الإرسال) وابعته من ميل الدار بـ Power Automate (الخطوات في دليل الإرسال).</div>' +
+      '<textarea id="pm-paste" rows="4" placeholder="اسم الطفل&#9;الإيميل (كل طفل في سطر — انسخهم من Excel والزقهم)" style="margin-top:6px"></textarea><div class="row" style="margin-top:6px"><button class="btn sec" type="button" id="pm-check">🔎 راجع</button><button class="btn" type="button" id="pm-save" disabled>💾 احفظ الإيميلات</button></div><div id="pm-res"></div>' +
+      '<div class="row" style="margin-top:10px">' + ['mid', 'final'].map(function (k) { return '<button class="btn sec" type="button" data-mall="' + k + '">📧 جهّز إرسال ' + CERT_KINDS[k].short + ' — كل المجموعات</button>'; }).join('') + '</div></div>' : '';
     h += Object.keys(by).length ? Object.keys(by).map(function (p) {
       return '<div class="panel"><h3>' + esc(p) + '</h3>' + by[p].map(function (c) {
         return '<div class="cls ok" data-cc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.term) + (c.level ? ' • ' + esc(c.level) : '') + ' • ' + esc(c.branch) + '</div></div>'; }).join('') + '</div>'; }).join('')
@@ -2412,6 +2555,21 @@ function certHome() {
     main(h);
     $('main').onclick = function (e) { var b;
       if ((b = e.target.closest('[data-tp]'))) { Sound.play('tap'); certTplEdit(b.dataset.tp); return; }
+      if (e.target.closest('[data-gb]')) { Sound.play('tap'); gradeBoardView(certHome); return; }
+      if (e.target.id === 'pm-check' || e.target.id === 'pm-save') { var save = e.target.id === 'pm-save', pb = e.target;   // v5.29
+        var rows = $('pm-paste').value.split(/\r?\n/).map(function (l) { var p = l.split('\t'); if (p.length < 2) { var m2 = l.match(/^(.*?)[\s,;]+(\S+@\S+.*)$/); p = m2 ? [m2[1], m2[2]] : [l, '']; } return { name: (p[0] || '').trim(), email: p.slice(1).join(';').trim() }; }).filter(function (r) { return r.name; });
+        if (!rows.length) { toast('الزق الأسامي والإيميلات الأول'); return; }
+        busy(pb, '…'); call('parentEmailsBulk', [ME.code, rows, !save], function (r) { busy(pb);
+          $('pm-res').innerHTML = '<div class="sub" style="margin-top:6px">' + (save ? '✅ اتحفظ ' + (r.saved || 0) + ' إيميل' : '✅ هيتحفظ ' + r.ok.length + ' إيميل') +
+            (r.notFound.length ? '<br>❓ مش لاقي الاسم (' + r.notFound.length + '): ' + r.notFound.map(esc).join('، ') : '') +
+            (r.twice.length ? '<br>⚠️ الاسم متكرر في أكتر من مجموعة — سجّله من صفحة المجموعة: ' + r.twice.map(function (x) { return esc(x.name) + ' (' + x.classes.map(esc).join(' / ') + ')'; }).join('، ') : '') +
+            (r.bad.length ? '<br>✖️ إيميل غلط أو فاضي: ' + r.bad.map(function (x) { return esc(x.name) + (x.email ? ' — ' + esc(x.email) : ''); }).join('، ') : '') + '</div>';
+          $('pm-save').disabled = save || !r.ok.length; if (save) { Sound.play('ok'); $('pm-paste').value = ''; } }, function (er) { busy(pb); failed(er); });
+        return; }
+      if ((b = e.target.closest('[data-mall]'))) { var mk = b.dataset.mall, names = list.map(function (c) { return c.name; }), got = [], gi = 0; busy(b, 'بيجيب المجموعات 0 / ' + names.length);
+        var nx = function () { if (gi >= names.length) { busy(b); certMailPack(got, mk, b, 'كل المجموعات'); return; }
+          call('certData', [ME.code, names[gi++]], function (dd) { got.push(dd); busy(b, 'بيجيب المجموعات ' + gi + ' / ' + names.length); nx(); }, function (er) { busy(b); failed(er); }); };
+        certFont().then(nx, nx); return; }
       if ((b = e.target.closest('[data-cc]'))) { Sound.play('tap'); certClass(b.dataset.cc); } };
   });
 }
@@ -2499,7 +2657,8 @@ function certClass(cls) {
         '<div class="sub">التقدير: A من ' + d.bands[0] + '% • B من ' + d.bands[1] + '% • C من ' + d.bands[2] + '% • D أقل • N مفيش درجة</div>' +
         (kind !== 'all' ? '<div class="row" style="align-items:center;margin:6px 0"><label class="lb" style="flex:0 0 auto;margin:0">📅 تاريخ الشهادة:</label><input type="date" id="cert-date" value="' + esc((d.dateSet || {})[kind] || '') + '" style="flex:0 1 190px"><button class="btn sm sec" type="button" id="cert-date-save" style="flex:0 0 auto">حفظ</button>' +
           ((d.dateSet || {})[kind] ? '<button class="btn sm ghost" type="button" id="cert-date-auto" style="flex:0 0 auto">رجّعه تلقائي</button>' : '') + '</div><div class="sub" style="margin-top:0">' + ((d.dateSet || {})[kind] ? 'متحدد بإيدك: ' + esc(certDateAr(d.dateSet[kind])) + ' • التلقائي: ' : 'تلقائي (يوم حلقة التقييم للمجموعة دي): ') + esc((d.dateAuto || {})[kind] ? certDateAr(d.dateAuto[kind]) : '—') + '</div>' : '') +
-        '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button></div>';
+        '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button>' +
+        '<button class="btn sec" type="button" data-mail="1" style="margin-top:6px"' + (ready ? '' : ' disabled') + '>📧 تجهيز الإرسال (' + d.students.filter(function (s) { return certHas(s, kind) && s.pemail; }).length + ' من ' + ready + ' ليهم إيميل)</button></div>';
       h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th>' + fs.map(function (f) { return '<th>' + esc(f.label) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
         d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
           return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(g.quran || '—') + '</td><td>' + esc(g.content || '—') + '</td><td><b>' + esc(g.overall || '—') + '</b></td>' +
@@ -2526,6 +2685,7 @@ function certClass(cls) {
       if ((b = e.target.closest('[data-dl]'))) { var st = d.students[Number(b.dataset.dl)]; busy(b, '…');
         certDraw(d, st, kind).then(function (cv) { saveBlob(certPdf(cv), certFile(st, kind)); busy(b); Sound.play('ok'); }, function () { busy(b); toast('حصلت مشكلة في الرسم'); });
         return; }
+      if ((b = e.target.closest('[data-mail]'))) { certMailPack([d], kind, b, d.cls); return; }
       if ((b = e.target.closest('[data-zip]'))) {
         var list = d.students.filter(function (s) { return certHas(s, kind); }), files = [], i = 0; busy(b, 'بيتجهز 0 / ' + list.length);
         var next = function () {
