@@ -150,7 +150,7 @@ document.addEventListener('click', function (e) { if (e.target.closest('[data-go
 // النسخة دي بتتمسح عند الخروج، وبعد 12 ساعة، وبعد أي حفظ/تعديل (علشان ما تشوفش حاجة قديمة بعد ما عدّلت).
 var SWR = { login: 1, followDashboard: 1, asmtHome: 1, certClasses: 1, quranHome: 1, progress: 1, coordBoard: 1, qualityBoard: 1, casesHome: 1, meetHome: 1, myTodo: 1, followClass: 1, myWarns: 1, myMeetings: 1, myQuranEvals: 1, classSubs: 1, classWarns: 1 };
 var SWR_TTL = 12 * 3600 * 1000, SWR_PFX = 'mk_c|', NAV = 0, TIMES = {};
-var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk)/;
+var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk|followSetTask)/;
 document.addEventListener('input', function () { NAV++; }, true);
 document.addEventListener('click', function (e) { if (!e.target.closest('#swr-bar')) NAV++; }, true);
 function swrKey(fn, args) { return SWR_PFX + fn + '|' + JSON.stringify(args); }
@@ -649,8 +649,12 @@ function classesAdmin(sel) {
 }
 function timingCls(t) { return t === 'في ميعاده' ? 'ok' : t === 'فائت' ? 'no' : 'wait'; }
 var TIMING_LEGEND = '<div class="sub" style="margin:6px 0 0">ألوان الحلقات: <span class="pill ok">اتسجلت في ميعادها</span> <span class="pill wait">اتسجلت متأخر</span> <span class="pill no">اتسجلت بعد ما الميعاد فات خالص</span> <span class="pill no">⏳ لسه ما اتسجلتش</span> • <b>📋⏳</b> = فيه مهمة لسه «لم يتم»</div>';
-function taskCell(x) { if (!x || !x.v) return '<td>—</td>'; if (x.v === 'لم يتم') return '<td><span class="pill wait">⏳</span></td>';
-  return '<td><span class="pill ok">✓</span>' + (x.at ? '<br><small style="color:var(--m)">اتأكدت ' + esc(x.at) + '</small>' : '') + '</td>'; }
+// v5.31: لو edit = {n, k} الخانة بتبقى زرار (المنسق / الإدارة بيسجّلوا بدل المربي)
+function taskCell(x, edit) {
+  var who = x && x.at ? '<br><small style="color:var(--m)">' + (x.sup ? 'سجّلها ' + esc(x.by) + ' ' : 'اتأكدت ') + esc(x.at) + '</small>' : '';
+  var pill = !x || !x.v ? '—' : x.v === 'لم يتم' ? '<span class="pill wait">⏳</span>' : '<span class="pill ok">✓</span>';
+  if (!edit) return '<td>' + pill + who + '</td>';
+  return '<td><button type="button" data-a="tset" data-n="' + edit.n + '" data-k="' + esc(edit.k) + '" data-v="' + esc(x && x.v || '') + '" title="دوس تغيّرها" style="border:none;background:none;cursor:pointer;padding:0;font-family:inherit">' + pill + ' ✏️</button>' + who + '</td>'; }
 function classCardHTML(c) {
   if (c.noTerm) return '<div class="cls" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • <span class="pill wait">مفيش ترم حالي</span></div></div>';
   c.sessions = (c.sessions || []).filter(function (s) { return s.status !== 'before'; });
@@ -704,8 +708,8 @@ function followClass(cls) {
     var tl = d.tasksLog || [];
     h += '<div class="panel"><h3>✅ مهام الحلقات</h3>' + (tl.length ? '<div class="tw"><table style="font-size:13px"><thead><tr><th>الحلقة</th><th>التسجيل</th>' + ME.tasks.map(function (t) { return '<th>' + esc(t[1]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       tl.map(function (x) { return '<tr><td>ح' + x.n + '<br><small style="color:var(--m)">' + esc(x.date) + '</small></td><td><span class="pill ' + timingCls(x.timing) + '">' + esc(x.timing || '—') + '</span><br><small style="color:var(--m)">' + esc(x.coach) + (x.mode === 'بديل' ? ' (بديل)' : '') + '</small></td>' +
-        ME.tasks.map(function (t) { return taskCell(x.tasks[t[0]]); }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-      '<div class="sub">✓ = تم يوم الحلقة • ✓ اتأكدت = المربي سجّلها «لم يتم» وأكّدها بعدين في التاريخ ده • ⏳ = لسه «لم يتم»</div>' : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>';
+        ME.tasks.map(function (t) { return taskCell(x.tasks[t[0]], ME.qualityOnly ? null : { n: x.n, k: t[0] }); }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="sub">✓ = تم يوم الحلقة • ✓ اتأكدت = المربي سجّلها «لم يتم» وأكّدها بعدين • سجّلها فلان = اتسجلت من المتابعة بدل المربي • ⏳ = لسه «لم يتم»' + (ME.qualityOnly ? '' : '<br>✏️ دوس على أي خانة تسجّلها بنفسك لو المربي عملها ونسي يسجّلها (أو تصلّحها).') + '</div>' : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>';
     h += '<div class="panel"><h3>🏫 الزيارات الصفية</h3><div id="vhist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3><div id="whist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>🔁 المربي البديل</h3><div id="sbox" class="sub">جاري التحميل…</div></div>';
@@ -718,6 +722,9 @@ function followClass(cls) {
       else if (a === 'withdraw') { var n = prompt('انسحب من أنهي حلقة؟ (رقم الحلقة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
       else if (a === 'report') report(b.dataset.c);
       else if (a === 'xl') excelExport(cls, b);
+      else if (a === 'tset' && !ME.qualityOnly) { var tn = (ME.tasks.filter(function (t) { return t[0] === b.dataset.k; })[0] || [])[1], to = b.dataset.v === 'تم' ? 'لم يتم' : 'تم';   // v5.31
+        if (!confirm('ح' + b.dataset.n + ' — ' + tn + ': تتسجل «' + to + '» باسمك؟')) return;
+        call('followSetTask', [ME.code, cls, b.dataset.n, b.dataset.k, to], function () { Sound.play('ok'); toast('اتسجلت ✅'); followClass(cls); }, failed); }
       else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel|addst|ren|move|mvgo|asgo)$/.test(a)) return;
       else if (a === 'addst') { $('stbox').innerHTML = '<div class="info" style="margin:8px 0"><b>➕ طالب جديد</b><div class="f" style="margin:6px 0 0"><input type="text" id="as-name" placeholder="اسم الطالب بالكامل"></div>' +
           '<div class="row"><div class="f" style="margin:6px 0 0"><input type="text" id="as-birth" placeholder="تاريخ الميلاد (2014-05-20) أو السنة"></div><div class="f" style="margin:6px 0 0"><select id="as-q">' + opts(d.quranLevels, '', 'مستوى القرآن') + '</select></div><div class="f" style="margin:6px 0 0"><select id="as-g">' + opts([{ v: 'ولد', l: '👦 ولد' }, { v: 'بنت', l: '👧 بنت' }], '', 'ولد/بنت') + '</select></div></div>' +
