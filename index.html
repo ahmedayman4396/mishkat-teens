@@ -150,7 +150,7 @@ document.addEventListener('click', function (e) { if (e.target.closest('[data-go
 // النسخة دي بتتمسح عند الخروج، وبعد 12 ساعة، وبعد أي حفظ/تعديل (علشان ما تشوفش حاجة قديمة بعد ما عدّلت).
 var SWR = { login: 1, followDashboard: 1, asmtHome: 1, certClasses: 1, quranHome: 1, progress: 1, coordBoard: 1, qualityBoard: 1, casesHome: 1, meetHome: 1, myTodo: 1, followClass: 1, myWarns: 1, myMeetings: 1, myQuranEvals: 1, classSubs: 1, classWarns: 1 };
 var SWR_TTL = 12 * 3600 * 1000, SWR_PFX = 'mk_c|', NAV = 0, TIMES = {};
-var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk|followSetTask)/;
+var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk|followSetTask|asmtMinZero)/;
 document.addEventListener('input', function () { NAV++; }, true);
 document.addEventListener('click', function (e) { if (!e.target.closest('#swr-bar')) NAV++; }, true);
 function swrKey(fn, args) { return SWR_PFX + fn + '|' + JSON.stringify(args); }
@@ -322,7 +322,7 @@ function renderSession() {
   body += ST.guests.map(function (g) { return studentHTML(g, true); }).join('');
   body += '<div class="panel"><div class="row"><button class="btn sm sec" type="button" data-act="guest">➕ طالب زائر من مجموعة تانية</button><button class="btn sm sec" type="button" data-act="newst">🆕 طالب جديد</button></div><div id="guest-box"></div></div>';
   body += qGuestsHTML(r);
-  body += tasksHTML();
+  // v5.33: مهام الحلقة (النيوزليتر، لينكات المراجعة) بقت مع المنسق — مش في فورم المربي
   body += '<div class="sticky"><button class="btn" type="button" data-act="save" id="save-btn">حفظ الحلقة ✅</button></div>';
   main(head + info + body); bindSession();
 }
@@ -527,8 +527,6 @@ function save() {
   var miss = all.filter(function (x) { return !isComplete(x); })[0];
   if (miss) { Sound.play('err'); var nm = (r.students.filter(function (s) { return s.code === miss.code; })[0] || miss).name; toast('باقي تقييم ناقص: ' + nm);
     var el = document.querySelector('.st[data-st="' + CSS.escape(miss.code) + '"]'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
-  var t = ME.tasks.filter(function (x) { return !ST.tasks[x[0]]; })[0];
-  if (t) { Sound.play('err'); toast('أكّد مهمة «' + t[1] + '»'); return; }
   var qp = qPayload(r);
   if (qp.miss) { Sound.play('err'); toast('كمّل قرآن ضيف ساعة القرآن: ' + qp.miss.name); var qe = document.querySelector('[data-qg="' + CSS.escape(qp.miss.code) + '"]'); if (qe) qe.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   var withNA = function (sc0) { var o = Object.assign({}, sc0); Object.keys(ST.naAll || {}).forEach(function (k) { if (ST.naAll[k]) o[k] = 'NA'; }); return o; };
@@ -546,10 +544,8 @@ function save() {
 function savedHTML(r) {
   var sv = r.saved;
   ST.ptasks = {};
-  var pend = ME.tasks.filter(function (t) { return sv.tasks[t[0]] === 'لم يتم'; });
   var h = '<div class="panel"><div class="line"><span class="pill ok">✅ اتسجلت</span><span class="pill">' + esc(sv.date) + '</span><span class="pill">' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + '</span><span class="pill">حاضر ' + sv.present + '</span><span class="pill">غائب ' + sv.absent + '</span><span class="pill ' + (sv.timing === 'في ميعاده' ? 'ok' : sv.timing === 'متأخر' ? 'wait' : 'no') + '">' + esc(sv.timing) + '</span></div>' +
-    '<div class="line">' + ME.tasks.map(function (t) { var ok = sv.tasks[t[0]] === 'تم'; return '<span class="pill ' + (ok ? 'ok' : 'wait') + '">' + (ok ? '✓ ' : '⏳ ') + t[1] + '</span>'; }).join('') + '</div>' +
-    (pend.length ? '<div class="task" style="flex-wrap:wrap">' + pend.map(function (t) { return '<button type="button" class="y" data-act="ptask" data-t="' + t[0] + '">✅ ' + t[1] + ' تم</button>'; }).join('') + '<button class="btn sm" type="button" data-act="confirm-tasks">تأكيد</button></div>' : '') +
+    '<div class="line"><span class="k">المهام (بيراجعها المنسق)</span>' + ME.tasks.map(function (t) { var v = sv.tasks[t[0]]; return '<span class="pill ' + taskCls(v) + '">' + esc(t[1]) + ': ' + taskTxt(v) + '</span>'; }).join('') + '</div>' +
     '<div class="sub" style="margin:8px 0 0">الحلقة دي للقراءة بس. لو في غلط اطلب من المنسق يصححه.</div></div>';
   var keys = r.criteria.map(function (c) { return c.key; });
   h += '<div class="panel"><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
@@ -566,9 +562,9 @@ function history() {
   var cls = ST.s.cls; loading();
   call('myHistory', [ME.code, cls, ST.sub], function (h) {
     main('<button class="back" type="button" id="hb">→ رجوع للحلقة</button><div class="panel"><h3>🗂️ تقييماتي السابقة — ' + esc(cls) + '</h3><div class="sub">' + esc(h.term || '') + '</div>' +
-      (h.sessions.length ? h.sessions.map(function (s) { var pend = ME.tasks.some(function (t) { return s.tasks[t[0]] === 'لم يتم'; });
+      (h.sessions.length ? h.sessions.map(function (s) { var pend = ME.tasks.some(function (t) { return s.tasks[t[0]] === 'لم يتم'; });   // v5.33: المنسق لقاها ما اتبعتش
         return '<div class="cls ' + (pend ? 'warn' : 'ok') + '" data-n="' + s.n + '"><h4>حلقة ' + s.n + ' — أسبوع ' + s.week + '</h4><div class="m">' + esc(s.date) + ' • ' + esc(s.coach) + (s.mode === 'بديل' ? ' (بديل)' : '') +
-          ' • حاضر ' + s.present + ' • غائب ' + s.absent + ' • ' + esc(s.timing) + (pend ? ' • <span class="pill wait">مهام مستنية</span>' : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>');
+          ' • حاضر ' + s.present + ' • غائب ' + s.absent + ' • ' + esc(s.timing) + (pend ? ' • <span class="pill no">مهام ما اتبعتش</span>' : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>');
     $('main').onclick = function (e) { if (e.target.id === 'hb') { openSession(cls, null, ST.sub); return; } var c = e.target.closest('[data-n]'); if (c) openSession(cls, Number(c.dataset.n), ST.sub); };
   });
 }
@@ -650,25 +646,30 @@ function classesAdmin(sel) {
 function timingCls(t) { return t === 'في ميعاده' ? 'ok' : t === 'فائت' ? 'no' : 'wait'; }
 var TIMING_LEGEND = '<div class="sub" style="margin:6px 0 0">ألوان الحلقات: <span class="pill ok">اتسجلت في ميعادها</span> <span class="pill wait">اتسجلت متأخر</span> <span class="pill no">اتسجلت بعد ما الميعاد فات خالص</span> <span class="pill no">⏳ لسه ما اتسجلتش</span> • <b>📋⏳</b> = فيه مهمة لسه «لم يتم»</div>';
 // v5.31: لو edit = {n, k} الخانة بتبقى زرار (المنسق / الإدارة بيسجّلوا بدل المربي)
+// v5.33: حالة المهمة: فاضي = لسه المنسق ما راجعش • تم • لم يتم (= ما اتبعتش)
+function taskTxt(v) { return v === 'تم' ? '✓ اتبعت' : v === 'لم يتم' ? '✗ ما اتبعتش' : '⏳ لسه ما اتراجعش'; }
+function taskCls(v) { return v === 'تم' ? 'ok' : v === 'لم يتم' ? 'no' : 'wait'; }
 function taskCell(x, edit) {
   var who = x && x.at ? '<br><small style="color:var(--m)">' + (x.sup ? 'سجّلها ' + esc(x.by) + ' ' : 'اتأكدت ') + esc(x.at) + '</small>' : '';
   var pill = !x || !x.v ? '—' : x.v === 'لم يتم' ? '<span class="pill wait">⏳</span>' : '<span class="pill ok">✓</span>';
   if (!edit) return '<td>' + pill + who + '</td>';
-  return '<td><button type="button" data-a="tset" data-n="' + edit.n + '" data-k="' + esc(edit.k) + '" data-v="' + esc(x && x.v || '') + '" title="دوس تغيّرها" style="border:none;background:none;cursor:pointer;padding:0;font-family:inherit">' + pill + ' ✏️</button>' + who + '</td>'; }
+  var v = x && x.v || '';   // v5.33: المنسق بيختار
+  return '<td><select data-tsel="1" data-n="' + edit.n + '" data-k="' + esc(edit.k) + '" style="min-width:110px;padding:4px">' +
+    [['', '⏳ لسه'], ['تم', '✓ اتبعت'], ['لم يتم', '✗ ما اتبعتش']].map(function (o) { return '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + (o[0] === '' && v ? ' disabled' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' + who + '</td>'; }
 function classCardHTML(c) {
   if (c.noTerm) return '<div class="cls" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • <span class="pill wait">مفيش ترم حالي</span></div></div>';
   c.sessions = (c.sessions || []).filter(function (s) { return s.status !== 'before'; });
   var ss = c.sessions.filter(function (s) { return s.status !== 'future'; });
   var missing = ss.some(function (s) { return s.status === 'open' && !s.log; });
-  var tasksPend = ss.some(function (s) { return s.log && ME.tasks.some(function (t) { return s.log.tasks[t[0]] === 'لم يتم'; }); }) || c.oldPendingTasks > 0;
+  var tasksPend = ss.some(function (s) { return s.log && ME.tasks.some(function (t) { return !s.log.tasks[t[0]]; }); }) || c.oldPendingTasks > 0;   // v5.33: مستنية مراجعة المنسق
   var cls = missing ? 'late' : (tasksPend || c.pending ? 'warn' : 'ok');
   return '<div class="cls ' + cls + '" data-fc="' + esc(c.name) + '"><h4>' + esc(c.name) + '</h4><div class="m">' + esc(c.program) + ' • ' + esc(c.level || '') + ' • أسبوع ' + c.week + ' • 👤 ' + esc(c.coaches.join(' • ') || '—') + '</div>' +
     '<div class="line"><span class="k">الحلقات</span>' + (c.sessions.length ? c.sessions.map(function (s) {
       if (s.status === 'cancelled') return '<span class="pill">🚫 ح' + s.n + '</span>';
-      if (s.log) { var tp = ME.tasks.filter(function (t) { return s.log.tasks[t[0]] === 'لم يتم'; });
-        return '<span class="pill ' + timingCls(s.log.timing) + '" title="' + esc('اتسجلت ' + (s.log.timing || '') + (tp.length ? ' — لسه «لم يتم»: ' + tp.map(function (t) { return t[1]; }).join('، ') : ' — المهام كلها تم')) + '">✓ ح' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + (tp.length ? ' 📋⏳' : '') + '</span>'; }
+      if (s.log) { var tp = ME.tasks.filter(function (t) { return !s.log.tasks[t[0]]; });
+        return '<span class="pill ' + timingCls(s.log.timing) + '" title="' + esc('اتسجلت ' + (s.log.timing || '') + (tp.length ? ' — مهام مستنية مراجعتك: ' + tp.map(function (t) { return t[1]; }).join('، ') : ' — المهام اتراجعت')) + '">✓ ح' + s.n + ' (' + s.log.present + '/' + (s.log.present + s.log.absent) + ')' + (s.log.mode === 'بديل' ? ' بديل' : '') + (tp.length ? ' 📋⏳' : '') + '</span>'; }
       return '<span class="pill ' + (s.status === 'open' ? 'no' : '') + '">' + (s.status === 'open' ? '⏳' : '…') + ' ح' + s.n + '</span>'; }).join('') : '—') + '</div>' +
-    (tasksPend ? '<div class="line"><span class="k">المهام</span><span class="pill wait">في مهام لسه «لم يتم»</span></div>' : '') +
+    (tasksPend ? '<div class="line"><span class="k">المهام</span><span class="pill wait">📋 مهام مستنية مراجعتك</span></div>' : '') +
     (c.pending ? '<div class="line"><span class="k">طلاب</span><span class="pill wait">' + c.pending + ' مستني تأكيد</span></div>' : '') +
     '<div class="line"><span class="k">آخر زيارة</span>' + (c.lastVisit ? 'أسبوع ' + esc(c.lastVisit.week) + ' — ' + esc(c.lastVisit.by) : '<span class="pill">مفيش لسه</span>') + '</div></div>';
 }
@@ -709,7 +710,7 @@ function followClass(cls) {
     h += '<div class="panel"><h3>✅ مهام الحلقات</h3>' + (tl.length ? '<div class="tw"><table style="font-size:13px"><thead><tr><th>الحلقة</th><th>التسجيل</th>' + ME.tasks.map(function (t) { return '<th>' + esc(t[1]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       tl.map(function (x) { return '<tr><td>ح' + x.n + '<br><small style="color:var(--m)">' + esc(x.date) + '</small></td><td><span class="pill ' + timingCls(x.timing) + '">' + esc(x.timing || '—') + '</span><br><small style="color:var(--m)">' + esc(x.coach) + (x.mode === 'بديل' ? ' (بديل)' : '') + '</small></td>' +
         ME.tasks.map(function (t) { return taskCell(x.tasks[t[0]], ME.qualityOnly ? null : { n: x.n, k: t[0] }); }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-      '<div class="sub">✓ = تم يوم الحلقة • ✓ اتأكدت = المربي سجّلها «لم يتم» وأكّدها بعدين • سجّلها فلان = اتسجلت من المتابعة بدل المربي • ⏳ = لسه «لم يتم»' + (ME.qualityOnly ? '' : '<br>✏️ دوس على أي خانة تسجّلها بنفسك لو المربي عملها ونسي يسجّلها (أو تصلّحها).') + '</div>' : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>';
+      '<div class="sub">المهام دي مسؤولية المنسق: بعد كل حلقة اختار لكل مهمة «اتبعت» أو «ما اتبعتش». ⏳ = لسه ما اتراجعتش (بتظهر في المطلوب منك لو عدّى ' + esc(String(ME.tasksDays || 7)) + ' أيام). الحلقات القديمة قبل التعديل فيها اللي المربي كان سجّله.' + (ME.qualityOnly ? '' : '') + '</div>' : '<div class="empty">لسه مفيش حلقات متسجلة.</div>') + '</div>';
     h += '<div class="panel"><h3>🏫 الزيارات الصفية</h3><div id="vhist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>⚠️ التنبيهات والإنذارات</h3><div id="whist" class="sub">جاري التحميل…</div></div>';
     h += '<div class="panel"><h3>🔁 المربي البديل</h3><div id="sbox" class="sub">جاري التحميل…</div></div>';
@@ -722,7 +723,7 @@ function followClass(cls) {
       else if (a === 'withdraw') { var n = prompt('انسحب من أنهي حلقة؟ (رقم الحلقة)'); if (n) call('setEnrollment', [ME.code, cls, b.dataset.c, 'withdraw', n], function () { toast('اتسجل الانسحاب'); followClass(cls); }); }
       else if (a === 'report') report(b.dataset.c);
       else if (a === 'xl') excelExport(cls, b);
-      else if (a === 'tset' && !ME.qualityOnly) { var tn = (ME.tasks.filter(function (t) { return t[0] === b.dataset.k; })[0] || [])[1], to = b.dataset.v === 'تم' ? 'لم يتم' : 'تم';   // v5.31
+      else if (false && a === 'tset') { var tn = (ME.tasks.filter(function (t) { return t[0] === b.dataset.k; })[0] || [])[1], to = b.dataset.v === 'تم' ? 'لم يتم' : 'تم';   // v5.31
         if (!confirm('ح' + b.dataset.n + ' — ' + tn + ': تتسجل «' + to + '» باسمك؟')) return;
         call('followSetTask', [ME.code, cls, b.dataset.n, b.dataset.k, to], function () { Sound.play('ok'); toast('اتسجلت ✅'); followClass(cls); }, failed); }
       else if (ME.qualityOnly && /^(birth|confirm|reject|withdraw|visit|cancel|addst|ren|move|mvgo|asgo)$/.test(a)) return;
@@ -763,7 +764,11 @@ function followClass(cls) {
       else if (a === 'vsave') saveVisit(cls);
       else if (a === 'cell') correctCell(cls, b);
     };
-    m.onchange = function (e) { var q = e.target.dataset.q, qc = e.target.dataset.qc, gd = e.target.dataset.gd;
+    var taskChange = function (e) { var t = e.target; if (!t.dataset.tsel || ME.qualityOnly || !t.value) return false;   // v5.33: المنسق بيراجع مهام الحلقة
+      var tn = (ME.tasks.filter(function (x) { return x[0] === t.dataset.k; })[0] || [])[1];
+      t.disabled = true;
+      call('followSetTask', [ME.code, cls, t.dataset.n, t.dataset.k, t.value], function () { Sound.play('ok'); toast('ح' + t.dataset.n + ' — ' + tn + ': اتسجلت ✅'); followClass(cls); }, function (er) { t.disabled = false; failed(er); }); return true; };
+    m.onchange = function (e) { if (taskChange(e)) return; var q = e.target.dataset.q, qc = e.target.dataset.qc, gd = e.target.dataset.gd;
       if (gd !== undefined) call('setEnrollment', [ME.code, cls, gd, 'gender', e.target.value], function () { toast('اتحفظ ✅'); }, failed); if (q !== undefined) call('setEnrollment', [ME.code, cls, q, 'quran', e.target.value], function () { toast('اتحفظ مستوى القرآن'); }, failed);
       if (qc !== undefined) call('setEnrollment', [ME.code, cls, qc, 'qclass', e.target.value], function () { Sound.play('ok'); toast('اتحفظت حلقة القرآن ✅'); followClass(cls); }, failed); };
   });
@@ -773,7 +778,7 @@ function followSession(cls, n) {
   call('followSession', [ME.code, cls, n], function (d) {
     ST.fs = d; var sv = d.saved;
     $('fbox').innerHTML = '<div class="panel"><h3>حلقة ' + n + ' — ' + esc(sv.date) + ' • ' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + ' • <span class="pill ' + timingCls(sv.timing) + '">' + esc(sv.timing) + '</span></h3>' +
-      (d.tasksLog ? '<div class="line"><span class="k">المهام</span>' + ME.tasks.map(function (t) { var x = d.tasksLog.tasks[t[0]] || {}; return '<span class="pill ' + (x.v === 'تم' ? 'ok' : 'wait') + '">' + (x.v === 'تم' ? '✓ ' : '⏳ ') + esc(t[1]) + (x.at ? ' (اتأكدت ' + esc(x.at) + ')' : '') + '</span>'; }).join('') + '</div>' : '') +
+      (d.tasksLog ? '<div class="line"><span class="k">المهام</span>' + ME.tasks.map(function (t) { var x = d.tasksLog.tasks[t[0]] || {}; return '<span class="pill ' + taskCls(x.v) + '">' + esc(t[1]) + ': ' + taskTxt(x.v) + (x.at ? ' (' + esc(x.by || '') + ' ' + esc(x.at) + ')' : '') + '</span>'; }).join('') + '</div>' : '') +
       '<div class="sub">' + (ME.qualityOnly ? '' : 'اضغط على أي درجة علشان تصححها (التعديل بيتسجل).') + '</div><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' +
       d.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' + sv.students.map(function (s) {
         return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(s.att) + '</td>' + d.criteria.map(function (c) {
@@ -853,7 +858,7 @@ function mLine(m) {
   var w = m.warnsByLevel || {};
   return '<div class="line"><span class="pill">' + m.groups + ' مجموعة • ' + m.coaches + ' مربي</span><span class="pill ' + (m.notVisited.length ? 'wait' : 'ok') + '">🏫 ' + m.visits + ' زيارة' + (m.notVisited.length ? ' • ' + m.notVisited.length + ' ما اتزارتش' : '') + '</span>' +
     '<span class="pill ' + (m.missing ? 'wait' : 'ok') + '">📋 ' + (m.onTimePct == null ? 'لسه مفيش حلقات متسجلة' : m.onTimePct + '% من الحلقات في ميعادها') + (m.missing ? ' • ' + m.missing + ' حلقة ناقصة' : '') + '</span>' +
-    (m.tasksOpen ? '<span class="pill wait">مهام «لم يتم» ' + m.tasksOpen + '</span>' : '') +
+    (m.tasksOpen ? '<span class="pill wait">📋 ' + m.tasksOpen + ' حلقة مهامها ما اتراجعتش في ميعادها</span>' : '') +
     '<span class="pill">⚠️ ' + m.warns + (m.warns ? ' (' + Object.keys(w).filter(function (k) { return w[k]; }).map(function (k) { return k + ' ' + w[k]; }).join('، ') + ')' : '') + '</span>' +
     (m.pending ? '<span class="pill wait">🆕 ' + m.pending + ' مستني تأكيد</span>' : '') + (m.followDue ? '<span class="pill wait">⏰ ' + m.followDue + ' متابعة زيارة فات ميعادها</span>' : '') + (m.casesLate ? '<span class="pill wait">📂 ' + m.casesLate + ' حالة متأخرة</span>' : '') + '</div>';
 }
@@ -1659,6 +1664,7 @@ function asmtForm(a) {
           : '<div class="f" style="margin-top:8px"><label class="lb">موعد التسليم:</label><input type="date" id="af-due" value="' + esc(x.due) + '"></div>') + '</div>';
       h += '<div class="panel"><h3>🎚️ سلّم التقييم</h3><div class="sub">السلّم الأساسي لأي بند ما لهوش سلّم خاص.</div><div class="row"><div class="f"><label class="lb">أقل درجة:</label><input type="number" id="af-min" value="' + esc(x.min) + '" min="0"></div>' +
         '<div class="f"><label class="lb">أعلى درجة:</label><input type="number" id="af-max" value="' + esc(x.max) + '"></div></div>' +
+        (x.id && Number(x.min) === 1 ? '<div class="sub" style="margin-top:6px">عايز المربي يقدر يدّي «0» لطفل ما ظهرش عنده أي مؤشر؟ <button class="btn ghost" type="button" data-mz="1">⬇️ خلّي السلّم يبدأ من 0</button><br><small>الدرجات المسجلة زي ما هي، ونسبها ما بتتغيرش. بنود القرآن (ليها سلّم خاص) مش بتتأثر.</small></div>' : '') +   // v5.32
         '<div class="sub">اسم كل درجة — بيظهر للمربي جنب الرقم.' + (SN[n] ? ' <button class="btn ghost" type="button" data-sn="1">استخدم الأسماء الجاهزة</button>' : '') + '</div>' +
         fit(x.labels, Math.min(n, 11)).map(function (t, i) { return '<div class="row" style="align-items:center;margin:4px 0"><b style="flex:0 0 34px;text-align:center">' + (Number(x.min) + i) + '</b><input type="text" data-lab="' + i + '" value="' + esc(t) + '" placeholder="اسم الدرجة"></div>'; }).join('') + '</div>';
       h += '<div class="panel"><h3>📋 أجزاء الامتحان</h3><div class="sub">قسّم الامتحان براحتك: كل جزء (زي «السؤال الأول») نوعه قرآن أو محتوى، وجواه بنود. لكل بند درجة (اختياري — لو سبتها فاضية البنود بتتحسب متساوية) وسلّم خاص لو محتاج.</div></div>';
@@ -1729,6 +1735,8 @@ function asmtForm(a) {
       if (e.target.closest('[data-b]')) { asmtHome(); return; }
       if ((b = e.target.closest('[data-dm]'))) { x.dueMode = b.dataset.dm; redraw(); return; }
       if (e.target.closest('[data-sn]')) { x.labels = (SN[nLv()] || []).slice(); redraw(); return; }
+      if (e.target.closest('[data-mz]')) { var lb0 = prompt('اسم الدرجة «0» (بيظهر للمربي):', 'لم يظهر بعد'); if (lb0 == null) return;   // v5.32
+        call('asmtMinZero', [ME.code, x.id, lb0], function (r) { Sound.play('ok'); toast('السلّم بقى من 0 ✅ (' + r.items + ' بند)'); loading(); call('asmtReport', [ME.code, x.id], function (rr) { asmtForm(rr.a); }); }, failed); return; }
       if ((b = e.target.closest('[data-sadd]'))) { var g = b.dataset.sadd; x.secs.push({ name: '', g: g, ql: '', items: [item()] }); redraw(); return; }
       if ((b = e.target.closest('[data-sx]'))) { var si = Number(b.dataset.sx); if (x.secs[si].items.some(function (z) { return z.k; }) && !confirm('تشيل الجزء ده بكل بنوده؟')) return;
         x.secs.splice(si, 1); if (!x.secs.length) x.secs.push({ name: 'المحتوى', g: 'content', items: [item()] }); redraw(); return; }
@@ -1964,7 +1972,7 @@ function meetHome() {
         return '<td>' + (x ? '<b class="' + (x.yes === x.total ? 's5' : x.yes ? 's3' : 's1') + '">' + x.yes + '/' + x.total + '</b>' + (x.excused ? '<br><small>اعتذر ' + x.excused + '</small>' : '') : '—') + '</td>'; }).join('') + '</tr>'; }).join('') +
       '</tbody></table></div><div class="sub">الرقم = حضر كام مرة من كام اجتماع اتسجل.</div>' : '<div class="empty">مفيش مربين في نطاقك.</div>') + '</div>';
     h += '<div class="panel"><h3>🗂️ الاجتماعات المسجلة</h3>' + (d.meetings.length ? d.meetings.map(function (m) {
-      return '<div class="cls ' + (m.present === m.total ? 'ok' : 'warn') + '" data-mo="' + esc(m.id) + '"><h4>' + esc(m.kind) + (m.title ? ' — ' + esc(m.title) : '') + '</h4><div class="m">' + esc(m.date) + ' • حضر ' + m.present + ' من ' + m.total + ' • سجّله ' + esc(m.byName) + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش اجتماعات متسجلة.</div>') + '</div>';
+      return '<div class="cls ' + (m.present === m.total ? 'ok' : 'warn') + '" data-mo="' + esc(m.id) + '"><h4>' + esc(m.kind) + (m.title ? ' — ' + esc(m.title) : '') + '</h4><div class="m">' + esc(m.date) + ' • ' + esc(m.branchName) + (m.mode ? ' • ' + (m.mode === 'أونلاين' ? '💻 ' : '🏫 ') + esc(m.mode) : '') + ' • حضر ' + m.present + ' من ' + m.total + ' • سجّله ' + esc(m.byName) + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش اجتماعات متسجلة.</div>') + '</div>';
     main(h);
     $('main').onclick = function (e) { var b;
       if (e.target.closest('[data-mn]')) { meetForm(null); return; }
@@ -1985,7 +1993,7 @@ function coachProfileView(code) {
       '<div class="sub">' + d.classes.map(function (c) { return esc(c.name) + ' (' + c.role + (c.other ? ' مع ' + esc(c.other) : '') + ')'; }).join(' • ') + '</div>' +
       '<div class="row"><div class="f"><label class="lb">من:</label><input type="date" id="cp-from" value="' + esc(q.from) + '"></div><div class="f"><label class="lb">إلى:</label><input type="date" id="cp-to" value="' + esc(q.to) + '"></div></div>' +
       '<div class="line">' + pill(m.onTimePct == null ? '' : m.onTimePct >= 80 ? 'ok' : 'wait', '📋 ' + (m.onTimePct == null ? 'لسه مفيش حلقات' : m.onTimePct + '% من ' + m.logs + ' حلقة في ميعادها')) +
-        (m.late ? pill('wait', 'متأخر ' + m.late) : '') + (m.missed ? pill('no', 'فائت ' + m.missed) : '') + (m.missing ? pill('no', '⏳ ' + m.missing + ' حلقة ما اتسجلتش') : '') + (m.tasksOpen ? pill('wait', 'مهام «لم يتم» ' + m.tasksOpen) : '') +
+        (m.late ? pill('wait', 'متأخر ' + m.late) : '') + (m.missed ? pill('no', 'فائت ' + m.missed) : '') + (m.missing ? pill('no', '⏳ ' + m.missing + ' حلقة ما اتسجلتش') : '') + (m.tasksOpen ? pill('no', 'حلقات مهامها ما اتبعتش: ' + m.tasksOpen) : '') +
         (m.subs ? pill('c', '🔁 بديل ' + m.subs + ' مرة') : '') + pill(m.meetNo ? 'wait' : 'ok', '🗓️ حضر ' + m.meetYes + (m.meetExcused ? ' • اعتذر ' + m.meetExcused : '') + (m.meetNo ? ' • غاب ' + m.meetNo : '')) +
         pill(m.warns ? 'no' : 'ok', '⚠️ ' + m.warns + ' إنذار') + '</div>' +
       '<div class="row" style="margin-top:8px">' + (d.canEval ? '<button class="btn" type="button" data-ce="1">📝 تقييم جديد</button>' : '') + (d.canDev ? '<button class="btn sec" type="button" data-dv="1">🌱 خطة تطوير</button>' : '') + '</div></div><div id="cebox"></div><div id="cbox"></div>';
@@ -2013,18 +2021,23 @@ function coachProfileView(code) {
   }, function (er) { failed(er); meetHome(); });
 }
 function meetForm(m) {
-  var d = ST.mh, x = { id: m ? m.id : '', date: m ? m.date : d.today, kind: m ? m.kind : d.kinds[0], title: m ? m.title || '' : '', notes: m ? m.notes || '' : '', att: {}, note: {} };
+  var d = ST.mh, x = { id: m ? m.id : '', date: m ? m.date : d.today, kind: m ? m.kind : d.kinds[0], title: m ? m.title || '' : '', notes: m ? m.notes || '' : '', att: {}, note: {},
+    branch: m ? m.branch || '' : (d.branches.length === 1 && !d.allBranches ? d.branches[0].code : ''), mode: m ? m.mode || '' : '' };   // v5.33: الفرع + حضور / أونلاين
+  var shown = function () { return d.coaches.filter(function (c) { return !x.branch || !(c.br || []).length || c.br.indexOf(x.branch) !== -1; }); };
   if (m) m.rows.forEach(function (r) { x.att[r.coach] = r.att; x.note[r.coach] = r.note || ''; });
   var canEdit = d.canEdit && (!m || m.canEdit);
   var draw = function () {
-    var done = d.coaches.filter(function (c) { return x.att[c.code]; }).length;
+    var cs = shown(), done = cs.filter(function (c) { return x.att[c.code]; }).length;
     var h = '<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>' + (x.id ? '✏️ ' + esc(x.id) + ' — ' + esc(x.kind) : '➕ اجتماع جديد') + '</h3>' +
       '<div class="row"><div class="f"><label class="lb">النوع:</label><select id="mt-kind"' + (canEdit ? '' : ' disabled') + '>' + opts(d.kinds, x.kind) + '</select></div>' +
       '<div class="f"><label class="lb">التاريخ:</label><input type="date" id="mt-date" value="' + esc(x.date) + '" max="' + esc(d.today) + '"' + (canEdit ? '' : ' disabled') + '></div></div>' +
-      '<div class="f"><label class="lb">اسم الاجتماع' + (x.kind === d.other ? '' : ' (اختياري)') + ':</label><input type="text" id="mt-title" value="' + esc(x.title) + '" placeholder="مثلًا: تدريب إدارة الحلقة"' + (canEdit ? '' : ' disabled') + '></div></div>';
+      '<div class="f"><label class="lb">اسم الاجتماع' + (x.kind === d.other ? '' : ' (اختياري)') + ':</label><input type="text" id="mt-title" value="' + esc(x.title) + '" placeholder="مثلًا: تدريب إدارة الحلقة"' + (canEdit ? '' : ' disabled') + '></div>' +
+      '<div class="row"><div class="f"><label class="lb">الفرع:</label><select id="mt-branch"' + (canEdit ? '' : ' disabled') + '>' + (d.allBranches ? '<option value="">كل الفروع</option>' : (d.branches.length > 1 && !x.branch ? '<option value="">— اختار الفرع —</option>' : '')) +
+        d.branches.map(function (b) { return '<option value="' + esc(b.code) + '"' + (x.branch === b.code ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="f"><label class="lb">الشكل:</label><div class="chips">' + d.modes.map(function (t) { return '<button type="button" class="chip' + (x.mode === t ? ' on' : '') + '" data-mmode="' + esc(t) + '"' + (canEdit ? '' : ' disabled') + '>' + (t === 'أونلاين' ? '💻 ' : '🏫 ') + esc(t) + '</button>'; }).join('') + '</div></div></div></div>';
     h += '<div class="panel"><div class="row"><h3 style="margin:0">👥 الحضور</h3>' + (canEdit ? '<button class="btn sm sec" type="button" data-all="1" style="flex:0 0 auto">✅ الكل حضر</button>' : '') + '</div>' +
-      '<div class="sub">اتحدد ' + done + ' من ' + d.coaches.length + ' — اللي ما تحددلوش حاجة مش هيتسجل.</div>' +
-      d.coaches.map(function (c) { var a = x.att[c.code] || '';
+      '<div class="sub">اتحدد ' + done + ' من ' + cs.length + (x.branch ? ' (مربين الفرع ده)' : '') + ' — اللي ما تحددلوش حاجة مش هيتسجل.</div>' +
+      cs.map(function (c) { var a = x.att[c.code] || '';
         return '<div class="st" style="margin:8px 0 0"><div class="st-h"><b>' + esc(c.name) + '</b><small style="color:var(--m)">' + esc(c.cls || '') + '</small></div><div class="chips">' +
           d.att.map(function (t) { return '<button type="button" class="chip' + (a === t ? ' on' + (t !== 'حضر' ? ' absent' : '') : '') + '" data-ma="' + esc(c.code) + '" data-v="' + esc(t) + '"' + (canEdit ? '' : ' disabled') + '>' + esc(t) + '</button>'; }).join('') + '</div>' +
           (a && a !== 'حضر' ? '<input type="text" data-mnote="' + esc(c.code) + '" value="' + esc(x.note[c.code] || '') + '" placeholder="السبب (اختياري)" style="margin-top:6px"' + (canEdit ? '' : ' disabled') + '>' : '') + '</div>'; }).join('') + '</div>';
@@ -2035,16 +2048,19 @@ function meetForm(m) {
   draw();
   var mm = $('main');
   mm.oninput = function (e) { var t = e.target; if (t.id === 'mt-title') x.title = t.value; else if (t.id === 'mt-notes') x.notes = t.value; else if (t.dataset.mnote) x.note[t.dataset.mnote] = t.value; };
-  mm.onchange = function (e) { var t = e.target; if (t.id === 'mt-kind') { x.kind = t.value; draw(); } else if (t.id === 'mt-date') x.date = t.value; };
+  mm.onchange = function (e) { var t = e.target; if (t.id === 'mt-kind') { x.kind = t.value; draw(); } else if (t.id === 'mt-date') x.date = t.value; else if (t.id === 'mt-branch') { x.branch = t.value; draw(); } };
   mm.onclick = function (e) { var b;
     if (e.target.closest('[data-b]')) { meetHome(); return; }
     if ((b = e.target.closest('[data-ma]')) && !b.disabled) { var c = b.dataset.ma; x.att[c] = x.att[c] === b.dataset.v ? '' : b.dataset.v; Sound.play('tap'); draw(); return; }
-    if (e.target.closest('[data-all]')) { d.coaches.forEach(function (c) { if (!x.att[c.code]) x.att[c.code] = 'حضر'; }); draw(); return; }
+    if ((b = e.target.closest('[data-mmode]')) && !b.disabled) { x.mode = b.dataset.mmode; Sound.play('tap'); draw(); return; }
+    if (e.target.closest('[data-all]')) { shown().forEach(function (c) { if (!x.att[c.code]) x.att[c.code] = 'حضر'; }); draw(); return; }
     if (e.target.id === 'mt-save') {
-      var rows = d.coaches.filter(function (c) { return x.att[c.code]; }).map(function (c) { return { coach: c.code, att: x.att[c.code], note: x.att[c.code] === 'حضر' ? '' : x.note[c.code] || '' }; });
+      if (!x.mode) { Sound.play('err'); toast('اختار الاجتماع حضور ولا أونلاين'); return; }
+      if (!x.branch && !d.allBranches) { Sound.play('err'); toast('اختار الفرع'); return; }
+      var rows = shown().filter(function (c) { return x.att[c.code]; }).map(function (c) { return { coach: c.code, att: x.att[c.code], note: x.att[c.code] === 'حضر' ? '' : x.note[c.code] || '' }; });
       if (!rows.length) { Sound.play('err'); toast('حدد حضور مربي واحد على الأقل'); return; }
       var btn = e.target; busy(btn, 'جاري الحفظ… ⏳');
-      call('meetSave', [ME.code, { id: x.id, date: x.date, kind: x.kind, title: x.title, notes: x.notes, rows: rows }], function (r) { busy(btn); Sound.play('ok'); toast('اتحفظ ✅ ' + r.id + ' — ' + r.saved + ' مربي'); meetHome(); }, function (er) { busy(btn); failed(er); });
+      call('meetSave', [ME.code, { id: x.id, date: x.date, kind: x.kind, title: x.title, notes: x.notes, branch: x.branch, mode: x.mode, rows: rows }], function (r) { busy(btn); Sound.play('ok'); toast('اتحفظ ✅ ' + r.id + ' — ' + r.saved + ' مربي'); meetHome(); }, function (er) { busy(btn); failed(er); });
     }
   };
 }
@@ -2054,7 +2070,7 @@ function myMeetingsView() {
     var ks = Object.keys(d.kinds);
     main('<button class="back" type="button" data-b="1">→ رجوع</button><div class="panel"><h3>🗓️ حضوري في الاجتماعات</h3>' +
       (ks.length ? '<div class="line">' + ks.map(function (k) { return '<span class="pill c">' + esc(k) + ': ' + d.kinds[k].yes + '/' + d.kinds[k].total + '</span>'; }).join('') + '</div>' : '') +
-      (d.list.length ? d.list.map(function (x) { return '<div class="ur"><span><b>' + esc(x.kind) + '</b>' + (x.title ? ' — ' + esc(x.title) : '') + ' <small style="color:var(--m)">' + esc(x.date) + '</small>' + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + '</span>' + attPill(x.att) + '</div>'; }).join('')
+      (d.list.length ? d.list.map(function (x) { return '<div class="ur"><span><b>' + esc(x.kind) + '</b>' + (x.title ? ' — ' + esc(x.title) : '') + ' <small style="color:var(--m)">' + esc(x.date) + (x.mode ? ' • ' + esc(x.mode) : '') + '</small>' + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + '</span>' + attPill(x.att) + '</div>'; }).join('')
         : '<div class="empty">لسه مفيش اجتماعات متسجلة ليك.</div>') + '</div>');
     $('main').onclick = function (e) { if (e.target.closest('[data-b]')) coachHome(); };
   });
