@@ -2393,6 +2393,7 @@ function certDrawTable(d, s, kind) {
     // الجداول
     var qCols = [['الحفظ', tb.quran.hifz], ['التجويد', tb.quran.tajweed], ['المعاني', tb.quran.maani], ['التقدير', tb.quran.overall]];
     var cCols = cols.map(function (c) { return [c.label, (tb.content || {})[c.k] || '']; });
+    if (cCols.length) cCols.push(['التقدير', tb.contentOverall || '']);   // v5.36: تقدير عام للمحتوى زي القرآن
     var table = function (x0, y0, wd, title, cs, hh) {
       var rr = 24, hd = 70, sub = 84, row = hh - hd - sub;
       var rect = function (px, py, pw, ph, r2) { x.beginPath(); x.moveTo(px + r2, py); x.arcTo(px + pw, py, px + pw, py + ph, r2); x.arcTo(px + pw, py + ph, px, py + ph, r2); x.arcTo(px, py + ph, px, py, r2); x.arcTo(px, py, px + pw, py, r2); x.closePath(); };
