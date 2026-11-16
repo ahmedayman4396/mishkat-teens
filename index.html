@@ -2229,12 +2229,19 @@ function certSign(x, who, cx, y, maxW) {
 var certImg = {};
 function certFont() {
   if (certFont.p) return certFont.p;
+  // v5.34: لازم نستنى ملف الخطوط (CSS) يتحمّل الأول — قبل كده document.fonts.load كانت بترجع على طول
+  // من غير ما تحمّل حاجة، فأول شهادات كانت بتترسم بخط احتياطي (الإمضا مش بخط اليد والشكل كله مختلف)
   certFont.p = new Promise(function (ok) {
+    var done = false, fin = function () { if (!done) { done = true; ok(); } };
+    setTimeout(fin, 8000);
     try {
-      if (!document.getElementById('cert-font')) { var l = document.createElement('link'); l.id = 'cert-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Aref+Ruqaa:wght@700&family=Dancing+Script:wght@600&display=swap'; document.head.appendChild(l); }
-      var t = setTimeout(ok, 3500);
-      Promise.all(['400 30px Cairo', '700 30px Cairo', '900 30px Cairo', '700 30px "Aref Ruqaa"', '600 30px "Dancing Script"'].map(function (f) { return document.fonts.load(f, /Dancing/.test(f) ? 'Sign' : 'شهادة'); })).then(function () { clearTimeout(t); ok(); }, function () { clearTimeout(t); ok(); });
-    } catch (e) { ok(); }
+      var l = document.getElementById('cert-font');
+      if (!l) { l = document.createElement('link'); l.id = 'cert-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Aref+Ruqaa:wght@700&family=Dancing+Script:wght@600&display=swap'; document.head.appendChild(l); }
+      var css = new Promise(function (r) { if (l.sheet) { r(); return; } l.addEventListener('load', r); l.addEventListener('error', r); setTimeout(r, 5000); });
+      css.then(function () {
+        return Promise.all(['400 30px Cairo', '700 30px Cairo', '900 30px Cairo', '700 30px "Aref Ruqaa"', '600 30px "Dancing Script"'].map(function (f) { return document.fonts.load(f, /Dancing/.test(f) ? 'Sign' : 'شهادة'); }));
+      }).then(fin, fin);
+    } catch (e) { fin(); }
   });
   return certFont.p;
 }
