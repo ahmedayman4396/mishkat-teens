@@ -150,7 +150,7 @@ document.addEventListener('click', function (e) { if (e.target.closest('[data-go
 // النسخة دي بتتمسح عند الخروج، وبعد 12 ساعة، وبعد أي حفظ/تعديل (علشان ما تشوفش حاجة قديمة بعد ما عدّلت).
 var SWR = { login: 1, followDashboard: 1, asmtHome: 1, certClasses: 1, quranHome: 1, progress: 1, coordBoard: 1, qualityBoard: 1, casesHome: 1, meetHome: 1, myTodo: 1, followClass: 1, myWarns: 1, myMeetings: 1, myQuranEvals: 1, classSubs: 1, classWarns: 1 };
 var SWR_TTL = 12 * 3600 * 1000, SWR_PFX = 'mk_c|', NAV = 0, TIMES = {};
-var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk|followSetTask|asmtMinZero)/;
+var WRITE_RE = /^(save|set|add|cancel|correct|ack|assign|move|rename|request|update|adminSave|adminSet|asmtSave|asmtScore|asmtSetStatus|caseSave|caseFollow|caseClose|caseMgmt|certDateSave|certTplSave|certValsSave|meetSave|qformSave|qualityNote|parentEmailsBulk|followSetTask|asmtMinZero|correctEval)/;
 document.addEventListener('input', function () { NAV++; }, true);
 document.addEventListener('click', function (e) { if (!e.target.closest('#swr-bar')) NAV++; }, true);
 function swrKey(fn, args) { return SWR_PFX + fn + '|' + JSON.stringify(args); }
@@ -314,7 +314,7 @@ function renderSession() {
   if (s.family) info += '<div class="info">🏠 الأسبوع ده فيه نشاط أسرة — علّم لكل طالب عمله ولا لأ.</div>';
   if ((r.asmts || []).length) info += asmtSessionHTML(r);
   else if (s.mid || s.final) info += '<div class="info">📝 الأسبوع ده أسبوع ' + (s.mid ? 'الميد ترم' : 'الفاينال') + ' — التقييم لسه ما اتعملش، المنسق هيضيفه من «📝 التقييمات».</div>';
-  if (r.readonly) { main(head + info + savedHTML(r) + qGuestsHTML(r)); bindSession(); return; }
+  if (r.readonly) { main(head + info + savedHTML(r) + qGuestsHTML(r)); bindSession(); if (r.editLeft) { var mm = $('main'), prev = mm.onclick; mm.onclick = function (e) { if (coachEditClick(e)) return; if (prev) prev.call(this, e); }; } return; }   // v5.37
   var body = '<div class="panel"><div class="row"><div class="f" style="margin:0"><label class="lb" for="sdate">تاريخ الحلقة:</label><input type="date" id="sdate" value="' + esc(ST.date) + '" max="' + esc(r.today) + '"></div>' +
     '<div style="flex:0 0 auto;font-size:13px;color:var(--m)">' + r.students.length + ' طالب</div></div></div>';
   body += naAllHTML(r);
@@ -541,15 +541,31 @@ function save() {
   }, function (e) { busy(b); failed(e); });
 }
 
+var RATED_ATT = ['حاضر', 'متأخر', 'تعويضي'];
+// v5.37: المربي بيعدّل حلقته في المهلة (نفس تصحيح المنسق: خانة خانة، وبيتسجل)
+function coachEditClick(e) {
+  var td = e.target.closest('[data-ce]'); if (!td) return false;
+  var k = td.dataset.ce, v, cls = ST.s.cls, n = td.dataset.n;
+  if (k === 'att') { v = prompt('الحضور: اكتب «حاضر» أو «متأخر» أو «غائب» أو «مستأذن»'); if (v == null) return true; v = v.trim(); if (['حاضر', 'متأخر', 'غائب', 'مستأذن'].indexOf(v) === -1) { toast('اكتب واحدة من: حاضر / متأخر / غائب / مستأذن'); return true; } }
+  else if (k === 'notes') { v = prompt('الملاحظة:', td.dataset.v || ''); if (v == null) return true; v = v.trim(); }
+  else { v = prompt('الدرجة الصح (رقم) أو «ل» لـ «لم يُلاحظ» أو NA:'); if (v == null) return true; v = v.trim();
+    if (v === 'ل') v = ME.notObserved; else if (/^na$/i.test(v)) v = 'NA'; else if (!/^[1-5]$/.test(v)) { toast('اكتب رقم من 1 لـ 5 أو NA'); return true; } }
+  call('correctEval', [ME.code, cls, n, td.dataset.st, k, v], function () { Sound.play('ok'); toast('اتعدّل ✅'); openSession(cls, Number(n), ST.sub); }, failed);
+  return true;
+}
 function savedHTML(r) {
   var sv = r.saved;
   ST.ptasks = {};
   var h = '<div class="panel"><div class="line"><span class="pill ok">✅ اتسجلت</span><span class="pill">' + esc(sv.date) + '</span><span class="pill">' + esc(sv.coach) + (sv.mode === 'بديل' ? ' (بديل)' : '') + '</span><span class="pill">حاضر ' + sv.present + '</span><span class="pill">غائب ' + sv.absent + '</span><span class="pill ' + (sv.timing === 'في ميعاده' ? 'ok' : sv.timing === 'متأخر' ? 'wait' : 'no') + '">' + esc(sv.timing) + '</span></div>' +
     '<div class="line"><span class="k">المهام (بيراجعها المنسق)</span>' + ME.tasks.map(function (t) { var v = sv.tasks[t[0]]; return '<span class="pill ' + taskCls(v) + '">' + esc(t[1]) + ': ' + taskTxt(v) + '</span>'; }).join('') + '</div>' +
-    '<div class="sub" style="margin:8px 0 0">الحلقة دي للقراءة بس. لو في غلط اطلب من المنسق يصححه.</div></div>';
-  var keys = r.criteria.map(function (c) { return c.key; });
+    (r.editLeft ? '<div class="sub" style="margin:8px 0 0">✏️ تقدر تعدّل الحلقة دي بنفسك لحد ' + (r.editLeft >= 1 ? Math.floor(r.editLeft) + ' ساعة' : 'أقل من ساعة') + ' كمان: دوس على أي درجة أو حالة حضور أو 📝 جنب الاسم. كل تعديل بيتسجل. بعد كده التصحيح من المنسق.</div></div>'
+      : '<div class="sub" style="margin:8px 0 0">الحلقة دي للقراءة بس. لو في غلط اطلب من المنسق يصححه.</div></div>');   // v5.37
+  var keys = r.criteria.map(function (c) { return c.key; }), ed = !!r.editLeft, n0 = r.session ? r.session.n : '';
   h += '<div class="panel"><div class="tw"><table><thead><tr><th>الطالب</th><th>الحضور</th>' + r.criteria.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-    sv.students.map(function (s) { return '<tr><td style="text-align:right">' + esc(s.name) + (s.guestFrom ? ' <small>(زائر)</small>' : '') + '</td><td>' + esc(s.att) + '</td>' + keys.map(function (k) { return '<td>' + sc(s.scores[k]) + '</td>'; }).join('') + '</tr>'; }).join('') +
+    sv.students.map(function (s) { var at = ' data-st="' + esc(s.code) + '" data-n="' + n0 + '"';
+      return '<tr><td style="text-align:right">' + esc(s.name) + (s.guestFrom ? ' <small>(زائر)</small>' : '') + (ed ? ' <button type="button" class="btn ghost sm" data-ce="notes"' + at + ' data-v="' + esc(s.notes || '') + '" title="ملاحظة">📝</button>' : '') + '</td>' +
+        '<td' + (ed && !s.guestFrom ? ' class="ed" data-ce="att"' + at : '') + '>' + esc(s.att) + '</td>' +
+        keys.map(function (k) { return '<td' + (ed && RATED_ATT.indexOf(s.att) !== -1 ? ' class="ed" data-ce="' + k + '"' + at : '') + '>' + sc(s.scores[k]) + '</td>'; }).join('') + '</tr>'; }).join('') +
     '</tbody></table></div>' + sv.students.filter(function (s) { return s.notes || s.behavior; }).map(function (s) {
       return '<div class="note"><b>' + esc(s.name) + ':</b> ' + esc(s.notes) + (s.behavior ? ' <span class="pill no">⚑ ' + esc(s.behavior) + '</span>' : '') + '</div>'; }).join('') + '</div>';
   return h;
