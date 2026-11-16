@@ -2454,20 +2454,25 @@ function certDrawTable(d, s, kind) {
 
 // ---------- PDF (صفحة A4 بالعرض فيها صورة الشهادة) ----------
 function b64bytes(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
-function certPdf(cv) {
-  var jpg = b64bytes(cv.toDataURL('image/jpeg', 0.92).split(',')[1]), enc = new TextEncoder(), parts = [], off = 0, xref = [];
+function certPdf(cvs) {   // v5.38: صفحة أو أكتر — كل صفحة بالعرض أو بالطول على حسب الصورة
+  cvs = Array.isArray(cvs) ? cvs : [cvs];
+  var enc = new TextEncoder(), parts = [], off = 0, xref = [], n = cvs.length;
   var add = function (p) { var b = typeof p === 'string' ? enc.encode(p) : p; parts.push(b); off += b.length; };
-  var obj = function (n, body, stream) { xref[n] = off; add(n + ' 0 obj\n' + body + '\n'); if (stream) { add('stream\n'); add(stream); add('\nendstream\n'); } add('endobj\n'); };
-  var pw = 842, ph = 595, cs = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im0 Do Q';
+  var obj = function (k, body, stream) { xref[k] = off; add(k + ' 0 obj\n' + body + '\n'); if (stream) { add('stream\n'); add(stream); add('\nendstream\n'); } add('endobj\n'); };
   add('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pw + ' ' + ph + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
-  obj(4, '<< /Type /XObject /Subtype /Image /Width ' + cv.width + ' /Height ' + cv.height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpg.length + ' >>', jpg);
-  obj(5, '<< /Length ' + cs.length + ' >>', enc.encode(cs));
-  var xo = off, xs = 'xref\n0 6\n0000000000 65535 f \n';
-  for (var i = 1; i <= 5; i++) xs += ('0000000000' + xref[i]).slice(-10) + ' 00000 n \n';
-  add(xs + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xo + '\n%%EOF');
+  var kids = []; for (var i = 0; i < n; i++) kids.push((3 + i * 3) + ' 0 R');
+  obj(2, '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>');
+  cvs.forEach(function (cv, i) {
+    var b = 3 + i * 3, land = cv.width >= cv.height, pw = land ? 842 : 595, ph = land ? 595 : 842, cs = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im0 Do Q';
+    var jpg = b64bytes(cv.toDataURL('image/jpeg', 0.92).split(',')[1]);
+    obj(b, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pw + ' ' + ph + '] /Resources << /XObject << /Im0 ' + (b + 1) + ' 0 R >> >> /Contents ' + (b + 2) + ' 0 R >>');
+    obj(b + 1, '<< /Type /XObject /Subtype /Image /Width ' + cv.width + ' /Height ' + cv.height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpg.length + ' >>', jpg);
+    obj(b + 2, '<< /Length ' + cs.length + ' >>', enc.encode(cs));
+  });
+  var tot = 3 + n * 3, xo = off, xs = 'xref\n0 ' + tot + '\n0000000000 65535 f \n';
+  for (var j = 1; j < tot; j++) xs += ('0000000000' + xref[j]).slice(-10) + ' 00000 n \n';
+  add(xs + 'trailer\n<< /Size ' + tot + ' /Root 1 0 R >>\nstartxref\n' + xo + '\n%%EOF');
   return new Blob(parts, { type: 'application/pdf' });
 }
 // ---------- ZIP (من غير ضغط) ----------
@@ -2505,27 +2510,132 @@ function certMailText(d, s, kind) {
 function certMailPack(ds, kind, btn, label) {
   var jobs = []; ds.forEach(function (d) { d.students.forEach(function (s) { if (certHas(s, kind)) jobs.push({ d: d, s: s }); }); });
   if (!jobs.length) { toast('مفيش شهادات جاهزة'); return; }
-  var files = [], rows = [], i = 0; busy(btn, 'بيتجهز 0 / ' + jobs.length);
+  var files = [], rows = [], i = 0, guides = {}; busy(btn, 'بيتجهز 0 / ' + jobs.length);
+  // v5.38: ورقة «كيف قيّمنا؟» — واحدة لكل تقييم (مش لكل طفل)، بتتحط في الـ ZIP واسمها في عمود Guide
+  var gds = []; ds.forEach(function (d) { var k = (d.sources || {})[kind]; if (k && !guides.hasOwnProperty(k) && kind !== 'all') { guides[k] = ''; gds.push(d); } });
+  var gi = 0, prep = function () {
+    if (gi >= gds.length) { next(); return; }
+    var d0 = gds[gi++]; busy(btn, '📘 بيتجهز شرح التقييم…');
+    guidePdfFor(d0, kind).then(function (gp) { if (!gp) { prep(); return; } var nm = (gds.length > 1 ? gi + ' - ' : '') + gp.name; return gp.blob.arrayBuffer().then(function (ab) { files.push({ name: nm, data: new Uint8Array(ab) }); guides[d0.sources[kind]] = nm; prep(); }); },
+      function () { prep(); });
+  };
   var next = function () {
     if (i >= jobs.length) {
       loadXlsx().then(function (X) {
-        var ws = X.utils.json_to_sheet(rows, { header: ['Email', 'Student', 'Group', 'File', 'Subject', 'Body', 'Note'] }); ws['!cols'] = [{ wch: 34 }, { wch: 28 }, { wch: 22 }, { wch: 40 }, { wch: 40 }, { wch: 60 }, { wch: 22 }];
+        var ws = X.utils.json_to_sheet(rows, { header: ['Email', 'Student', 'Group', 'File', 'Subject', 'Body', 'Note', 'Guide'] }); ws['!cols'] = [{ wch: 34 }, { wch: 28 }, { wch: 22 }, { wch: 40 }, { wch: 40 }, { wch: 60 }, { wch: 22 }, { wch: 36 }];
         var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Send'); var xb = X.write(wb, { type: 'array', bookType: 'xlsx' });
         files.push({ name: 'قائمة_الإرسال.xlsx', data: new Uint8Array(xb) });
         saveBlob(certZip(files), ('إرسال ' + CERT_KINDS[kind].short + ' - ' + label).replace(/[\\/:*?"<>|]/g, '') + '.zip'); busy(btn); Sound.play('ok');
-        var miss = rows.filter(function (r) { return !r.Email; }).length;
-        toast('اتجهز ' + (files.length - 1) + ' شهادة' + (miss ? ' — ' + miss + ' من غير إيميل' : ' ✅'));
+        var miss = rows.filter(function (r) { return !r.Email; }).length, ng = Object.keys(guides).filter(function (k) { return guides[k]; }).length;
+        toast('اتجهز ' + (files.length - 1 - ng) + ' شهادة' + (ng ? ' + شرح التقييم' : '') + (miss ? ' — ' + miss + ' من غير إيميل' : ' ✅'));
       }, function (e) { busy(btn); failed(e); });
       return;
     }
     var j = jobs[i++], name = (j.s.code + ' - ' + certFile(j.s, kind)).replace(/[\\/:*?"<>|]/g, ''), mt = certMailText(j.d, j.s, kind);
     certDraw(j.d, j.s, kind).then(function (cv) { return certPdf(cv).arrayBuffer(); }).then(function (ab) {
       files.push({ name: name, data: new Uint8Array(ab) });
-      rows.push({ Email: j.s.pemail || '', Student: j.s.name, Group: j.d.cls, File: name, Subject: mt.subject, Body: mt.body, Note: j.s.pemail ? '' : 'مفيش إيميل — مش هيتبعت' });
+      rows.push({ Email: j.s.pemail || '', Student: j.s.name, Group: j.d.cls, File: name, Subject: mt.subject, Body: mt.body, Note: j.s.pemail ? '' : 'مفيش إيميل — مش هيتبعت', Guide: guides[(j.d.sources || {})[kind]] || '' });
       busy(btn, 'بيتجهز ' + i + ' / ' + jobs.length); setTimeout(next, 0);
     }, function () { busy(btn); toast('حصلت مشكلة في الرسم'); });
   };
-  next();
+  prep();
+}
+
+// ======================================================================
+// v5.38: 📘 «كيف قيّمنا؟» — ورقة عامة لأولياء الأمور (واحدة لكل تقييم، مش لكل طفل)
+// بتترسم من تعريف التقييم نفسه: البنود ووصفها، معنى كل مستوى، درجات القرآن، وحدود التقديرات
+// ======================================================================
+function guideFile(g) { return ('كيف قيمنا - ' + CERT_KINDS[g.kind].t).replace(/[\\/:*?"<>|]/g, '') + '.pdf'; }
+function guideDraw(g) {
+  var W = 1240, H = 1754, M = 90, th = CERT_THEME[g.section] || CERT_THEME.teens, pages = [], x = null, y = 0, R = W - M, CW = W - 2 * M;
+  return Promise.all([certFont(), certLogo(th)]).then(function (r) {
+    var logo = r[1];
+    var font = function (sz, wt) { x.font = (wt || 400) + ' ' + sz + 'px ' + CERT_FONT; };
+    var wrap = function (txt, sz, wt, maxW) { font(sz, wt); var out = [], line = '';
+      String(txt || '').split(/\s+/).filter(String).forEach(function (w) { var t = line ? line + ' ' + w : w; if (line && x.measureText(t).width > maxW) { out.push(line); line = w; } else line = t; });
+      if (line) out.push(line); return out; };
+    var page = function () {
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H; pages.push(cv); x = cv.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+      var bw = (W - 2 * M) / th.c.length; th.c.forEach(function (c, i) { x.fillStyle = c; x.fillRect(M + i * bw, 36, bw, 12); x.fillRect(M + (th.c.length - 1 - i) * bw, H - 48, bw, 12); });
+      x.direction = 'rtl'; x.textBaseline = 'alphabetic'; y = 90;
+      if (pages.length === 1 && logo) { var lh = g.section === 'dar' ? 90 : 140, lw = lh * th.ar; x.drawImage(logo, (W - lw) / 2, 60, lw, lh); y = 60 + lh + 40; }
+    };
+    var need = function (h) { if (y + h > H - 110) page(); };
+    var para = function (txt, sz, wt, col, opt) { opt = opt || {}; var lh = Math.round(sz * 1.55), ls = wrap(txt, sz, wt, opt.w || CW);
+      ls.forEach(function (l) { need(lh); font(sz, wt); x.fillStyle = col || th.ink; x.textAlign = opt.center ? 'center' : 'right'; x.fillText(l, opt.center ? W / 2 : (opt.r || R), y + sz); y += lh; }); };
+    var head = function (txt) { need(110); y += 18; x.fillStyle = th.c[1]; x.fillRect(R - 10, y, 10, 46); font(34, 900); x.fillStyle = th.title; x.textAlign = 'right'; x.fillText(txt, R - 26, y + 36); y += 66; };
+    var rrect = function (px, py, pw, ph, r2) { x.beginPath(); x.moveTo(px + r2, py); x.arcTo(px + pw, py, px + pw, py + ph, r2); x.arcTo(px + pw, py + ph, px, py + ph, r2); x.arcTo(px, py + ph, px, py, r2); x.arcTo(px, py, px + pw, py, r2); x.closePath(); };
+    page();
+    var what = g.kind === 'mid' ? 'تقييم منتصف الفصل الدراسي' : 'تقييم نهاية الفصل الدراسي';
+    para('كيف قيّمنا أبناءنا؟', 58, 900, th.title, { center: true });
+    para(what + (g.year ? ' — العام الأكاديمي ' + g.year : ''), 32, 700, th.ink, { center: true });
+    para([g.program, g.term].filter(String).join(' • '), 26, 400, '#666', { center: true });
+    y += 16;
+    para('ولي الأمر الكريم، تصلكم مع هذه الورقة شهادة ' + what + '. توضّح الورقة كيف قِيس مستوى الطالب في كل بند من بنود الشهادة، ومعنى كل تقدير فيها. التقييم وسيلة لمتابعة تطوّر كل طالب بالنسبة لنفسه، ولا يُقارَن فيه الطلاب ببعضهم ولا يُرتَّبون.', 27, 400, '#333');
+    // مفتاح التقديرات
+    head('معنى التقديرات في الشهادة');
+    var bd = g.bands || [90, 80, 70], keys = [['A', 'من ' + bd[0] + '% إلى 100%'], ['B', 'من ' + bd[1] + '% إلى أقل من ' + bd[0] + '%'], ['C', 'من ' + bd[2] + '% إلى أقل من ' + bd[1] + '%'], ['D', 'أقل من ' + bd[2] + '%'], ['N', 'لم يُقيَّم الطالب في هذا الجزء (غياب)']];
+    var kw = (CW - 3 * 20) / 5;
+    need(150); keys.forEach(function (k, i) { var px = R - (i + 1) * kw - i * 15; rrect(px, y, kw, 130, 18); x.strokeStyle = CERT_GCOL[k[0]]; x.lineWidth = 4; x.stroke();
+      font(52, 900); x.fillStyle = CERT_GCOL[k[0]]; x.textAlign = 'center'; x.direction = 'ltr'; x.fillText(k[0], px + kw / 2, y + 62); x.direction = 'rtl';
+      var ls = wrap(k[1], 20, 700, kw - 20); ls.slice(0, 2).forEach(function (l, j) { font(20, 700); x.fillStyle = '#555'; x.fillText(l, px + kw / 2, y + 94 + j * 26); }); });
+    y += 150;
+    para('النسبة = مجموع درجات الطالب في الجزء ÷ الدرجة النهائية للجزء، ثم تُحوَّل النسبة إلى حرف حسب الجدول السابق.', 25, 400, '#333');
+    // القرآن
+    if ((g.quran || []).length) {
+      head('أولًا: تقييم القرآن الكريم');
+      para('يُختبر كل طالب في المقرر الخاص بمستواه، وتُوزَّع الدرجة كالآتي:', 26, 400, '#333');
+      var names = []; g.quran.forEach(function (q) { q.items.forEach(function (it) { if (names.indexOf(it.name) === -1) names.push(it.name); }); });
+      var cols = ['المقرر'].concat(names).concat(['المجموع']), cw0 = CW / cols.length, rh = 64;
+      var row = function (vals, hd) { need(rh); vals.forEach(function (v, i) { var px = R - (i + 1) * cw0; x.fillStyle = hd ? th.c[1] : (i ? '#fff' : '#eef8fd'); x.fillRect(px, y, cw0, rh); x.strokeStyle = th.c[1]; x.lineWidth = 2; x.strokeRect(px, y, cw0, rh);
+        var sz = 24; font(sz, hd || !i ? 700 : 400); while (x.measureText(v).width > cw0 - 16 && sz > 14) { sz -= 2; font(sz, hd || !i ? 700 : 400); }
+        x.fillStyle = hd ? '#fff' : th.ink; x.textAlign = 'center'; x.fillText(v, px + cw0 / 2, y + rh / 2 + sz / 3); }); y += rh; };
+      row(cols, true);
+      g.quran.forEach(function (q) { row([q.level].concat(names.map(function (n) { var it = q.items.filter(function (z) { return z.name === n; })[0]; return it ? 'من ' + it.max : '—'; })).concat(['من ' + q.total])); });
+      y += 14;
+      para('في الشهادة: خانة لكل جزء (' + names.join('، ') + ')، وخانة «التقدير» للقرآن كله = مجموع الدرجات ÷ ' + (g.quran.length === 1 ? g.quran[0].total : 'المجموع') + '.', 24, 400, '#333');
+    }
+    // المحتوى
+    if ((g.content || []).length) {
+      head((g.quran || []).length ? 'ثانيًا: تقييم المحتوى' : 'تقييم المحتوى');
+      para('يلاحظ المربي الطالب في كل بند خلال الحلقات والتقييم، ويختار المستوى الذي يصف ما ظهر منه فعلًا. هذه هي المستويات ومعنى كل منها في كل بند:', 26, 400, '#333');
+      var LW = 230, lvH = function (lv) { return Math.max(1, lv.text ? wrap(lv.text, 22, 400, CW - LW - 30).length : 1) * 32 + 10; };
+      var ttlOf = function (grp, it) { return grp.items.length === 1 && it.name === grp.label ? it.desc : it.name + (it.desc ? ' — ' + it.desc : ''); };
+      var itH = function (grp, it) { var t2 = ttlOf(grp, it); return (t2 ? wrap(t2, 26, 700, CW).length * 40 : 0) + it.levels.slice(-2).reduce(function (a2, lv) { return a2 + lvH(lv); }, 0); };   // العنوان + أول مستويين على الأقل في نفس الصفحة
+      g.content.forEach(function (grp) {
+        need(80 + (grp.items.length > 1 ? 40 : 0) + itH(grp, grp.items[0])); y += 10; font(30, 900);   // عنوان الخانة ما يفضلش لوحده آخر الصفحة
+        rrect(M, y, CW, 54, 14); x.fillStyle = '#eef8fd'; x.fill(); x.fillStyle = th.title; x.textAlign = 'right'; x.fillText('خانة «' + grp.label + '» في الشهادة', R - 20, y + 38); y += 70;
+        if (grp.items.length > 1) para('تتكوّن من ' + grp.items.length + ' بنود، وتقديرها من متوسطها: ' + grp.items.map(function (i) { return i.name; }).join('، ') + '.', 23, 400, '#555');
+        grp.items.forEach(function (it) {
+          var ttl = ttlOf(grp, it);
+          need(itH(grp, it));   // البند كله في صفحة واحدة لو ينفع
+          if (ttl) para(ttl, 26, 700, th.ink);
+          it.levels.slice().reverse().forEach(function (lv) {
+            var lab = (lv.name || ('المستوى ' + lv.v)) + ' (' + lv.v + ')', ls = lv.text ? wrap(lv.text, 22, 400, CW - LW - 30) : [], h = lvH(lv);
+            need(h); x.fillStyle = '#f7f9fb'; x.fillRect(M, y, CW, h - 6);
+            font(22, 700); x.fillStyle = th.title; x.textAlign = 'right'; x.fillText(lab, R - 14, y + 30);
+            ls.forEach(function (l, j) { font(22, 400); x.fillStyle = '#333'; x.fillText(l, R - LW, y + 30 + j * 32); });
+            if (!ls.length) { font(22, 400); x.fillStyle = '#888'; x.fillText('لم تظهر مؤشرات هذا البند بعد', R - LW, y + 30); }
+            y += h;
+          });
+          y += 12;
+        });
+      });
+      para('خانة «التقدير» للمحتوى = مجموع درجات بنود المحتوى ÷ مجموع درجاتها النهائية.', 24, 400, '#333');
+    }
+    need(220); head('ملاحظات');
+    ['التقدير يعبّر عمّا ظهر من الطالب وقت التقييم، وهو نقطة للمتابعة والتطوير وليس حكمًا نهائيًا.', 'إذا غاب الطالب عن أحد الجزأين يظهر الحرف N في خانات هذا الجزء.', 'لأي استفسار عن مستوى الطالب يُرجى التواصل مع مربي المجموعة.']
+      .forEach(function (t) { para('•  ' + t, 24, 400, '#333'); });
+    pages.forEach(function (cv, i) { var c = cv.getContext('2d'); c.direction = 'rtl'; c.font = '400 20px ' + CERT_FONT; c.fillStyle = '#999'; c.textAlign = 'center'; c.fillText('صفحة ' + (i + 1) + ' من ' + pages.length, W / 2, H - 70); });
+    return pages;
+  });
+}
+function guidePdfFor(d, kind) {   // d = certData — بيرجّع { name, blob } أو null لو مفيش تقييم
+  return new Promise(function (ok, no) {
+    if (!d.sources || !d.sources[kind]) { ok(null); return; }
+    call('certGuide', [ME.code, d.cls, kind], function (g) { guideDraw(g).then(function (ps) { ok({ name: guideFile(g), blob: certPdf(ps), asmt: g.asmt }); }, no); }, no);
+  });
 }
 
 // ---------- الشاشات ----------
@@ -2710,7 +2820,8 @@ function certClass(cls) {
         (kind !== 'all' ? '<div class="row" style="align-items:center;margin:6px 0"><label class="lb" style="flex:0 0 auto;margin:0">📅 تاريخ الشهادة:</label><input type="date" id="cert-date" value="' + esc((d.dateSet || {})[kind] || '') + '" style="flex:0 1 190px"><button class="btn sm sec" type="button" id="cert-date-save" style="flex:0 0 auto">حفظ</button>' +
           ((d.dateSet || {})[kind] ? '<button class="btn sm ghost" type="button" id="cert-date-auto" style="flex:0 0 auto">رجّعه تلقائي</button>' : '') + '</div><div class="sub" style="margin-top:0">' + ((d.dateSet || {})[kind] ? 'متحدد بإيدك: ' + esc(certDateAr(d.dateSet[kind])) + ' • التلقائي: ' : 'تلقائي (يوم حلقة التقييم للمجموعة دي): ') + esc((d.dateAuto || {})[kind] ? certDateAr(d.dateAuto[kind]) : '—') + '</div>' : '') +
         '<button class="btn" type="button" data-zip="1"' + (ready ? '' : ' disabled') + '>⬇️ كل شهادات ' + CERT_KINDS[kind].short + ' (' + ready + ' ملف في ZIP)</button>' +
-        '<button class="btn sec" type="button" data-mail="1" style="margin-top:6px"' + (ready ? '' : ' disabled') + '>📧 تجهيز الإرسال (' + d.students.filter(function (s) { return certHas(s, kind) && s.pemail; }).length + ' من ' + ready + ' ليهم إيميل)</button></div>';
+        '<button class="btn sec" type="button" data-mail="1" style="margin-top:6px"' + (ready ? '' : ' disabled') + '>📧 تجهيز الإرسال (' + d.students.filter(function (s) { return certHas(s, kind) && s.pemail; }).length + ' من ' + ready + ' ليهم إيميل)</button>' +
+        (kind !== 'all' ? '<button class="btn ghost" type="button" data-guide="1" style="margin-top:6px"' + (d.sources[kind] ? '' : ' disabled') + '>📘 «كيف قيّمنا؟» — ورقة عامة لأولياء الأمور (PDF)</button><div class="sub" style="margin-top:2px">ورقة واحدة للمجموعة كلها: بنود التقييم ومعنى كل مستوى ودرجات القرآن والتقديرات — بتتعمل من التقييم نفسه، وبتتحط تلقائي في ملف الإرسال.</div>' : '') + '</div>';
       h += '<div class="panel"><div class="tw"><table><thead><tr><th style="text-align:right">الطالب</th><th>القرآن</th><th>المنهج</th><th>العام</th>' + fs.map(function (f) { return '<th>' + esc(f.label) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>' +
         d.students.map(function (s, i) { var g = s[kind], okk = certHas(s, kind);
           return '<tr><td style="text-align:right">' + esc(s.name) + '</td><td>' + esc(g.quran || '—') + '</td><td>' + esc(g.content || '—') + '</td><td><b>' + esc(g.overall || '—') + '</b></td>' +
@@ -2738,6 +2849,8 @@ function certClass(cls) {
         certDraw(d, st, kind).then(function (cv) { saveBlob(certPdf(cv), certFile(st, kind)); busy(b); Sound.play('ok'); }, function () { busy(b); toast('حصلت مشكلة في الرسم'); });
         return; }
       if ((b = e.target.closest('[data-mail]'))) { certMailPack([d], kind, b, d.cls); return; }
+      if ((b = e.target.closest('[data-guide]'))) { busy(b, '📘 بيترسم…');   // v5.38
+        guidePdfFor(d, kind).then(function (gp) { busy(b); if (!gp) { toast('لسه مفيش تقييم'); return; } saveBlob(gp.blob, gp.name); Sound.play('ok'); }, function (er) { busy(b); failed(er); }); return; }
       if ((b = e.target.closest('[data-zip]'))) {
         var list = d.students.filter(function (s) { return certHas(s, kind); }), files = [], i = 0; busy(b, 'بيتجهز 0 / ' + list.length);
         var next = function () {
