@@ -1798,6 +1798,11 @@ function asmtEntry(id, cls, back) {
       if (r.att !== 'حاضر') return '<span class="pill wait">' + esc(r.att) + '</span>';
       var sa = aFor(a, r.ql), n = sa.domains.filter(function (dm) { return r.data[dm.k] && r.data[dm.k].v != null; }).length;
       var pt = aHasPts(sa) && n ? ' <span class="pill c">' + aPts(sa, r.data).got + ' من ' + aPts(sa, r.data).max + '</span>' : '';
+      if (n && n < sa.domains.length) {   // v5.35: قسم كامل فاضي والباقي كامل = غاب عن القسم ده (مكتمل)
+        var gc = {}; sa.domains.forEach(function (dm) { var g = dm.g === 'quran' ? 'quran' : 'content', c = gc[g] = gc[g] || [0, 0]; c[0]++; if (r.data[dm.k] && r.data[dm.k].v != null) c[1]++; });
+        var sk = Object.keys(gc).filter(function (g) { return gc[g][1] === 0; }), part = Object.keys(gc).some(function (g) { return gc[g][1] && gc[g][1] < gc[g][0]; });
+        if (!part && sk.length) return '<span class="pill ok">مكتمل</span> <span class="pill wait" title="القسم ده فاضي كله = غاب عنه — بيطلع N في الشهادة">غاب ' + (sk[0] === 'quran' ? 'القرآن' : 'المحتوى') + '</span>' + pt;
+      }
       return (n === sa.domains.length ? '<span class="pill ok">مكتمل</span>' : (n ? '<span class="pill wait">ناقص ' + (sa.domains.length - n) + '</span>' : '<span class="pill">لسه</span>')) + pt;
     };
     var hasQL = a.domains.some(function (z) { return z.ql; });
