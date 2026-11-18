@@ -1823,24 +1823,44 @@ function asmtEntry(id, cls, back) {
     };
     var hasQL = a.domains.some(function (z) { return z.ql; });
     var qlPill = function (s) { return !hasQL ? '' : s.quran ? ' <span class="pill c">📖 ' + esc(s.quran) + '</span>' : ' <span class="pill wait">سجّل مستوى القرآن</span>'; };
+    // v5.40: الجدول على الموبايل — أعمدة القرآن لكل المستويات بقت عمود واحد لكل بند (الحفظ / التجويد / المعاني)
+    // وكل طالب بيكتب في بنود مستواه، + تبويب «المحتوى / القرآن» علشان الأعمدة ما تتزحمش
+    var gCols = (function () { var cols = [], byQ = {}, seen = {};
+      doms.forEach(function (dm) {
+        if (dm.g === 'quran' && dm.ql) { var sk = dm.ql + '|' + dm.name, qk = dm.name + '#' + (seen[sk] = (seen[sk] || 0) + 1);   // نفس الاسم مرتين في نفس المستوى = عمودين
+          if (byQ[qk]) { byQ[qk].doms.push(dm); return; }
+          byQ[qk] = { g: 'quran', name: dm.name, sec: '📖 القرآن', doms: [dm], merged: true }; cols.push(byQ[qk]); return; }
+        cols.push({ g: dm.g === 'quran' ? 'quran' : 'content', name: dm.name, sec: dm.sec || (dm.g === 'quran' ? '📖 القرآن' : '💡 المحتوى'), doms: [dm] }); });
+      return cols; })();
+    var bothG = gCols.some(function (c) { return c.g === 'quran'; }) && gCols.some(function (c) { return c.g !== 'quran'; });
     var gridHTML = function () {
       var e = ST.ae, dis = d.canEdit ? '' : ' disabled';
-      var withSec = doms.some(function (z) { return z.sec; }) || doms.some(function (z) { return z.g === 'quran'; }) && doms.some(function (z) { return z.g !== 'quran'; });
-      return '<div class="panel"><div class="sub" style="margin:0 0 6px">اكتب الرقم من الكشف • <b>3+</b> = 3 وقريب من اللي بعده (↑) • Tab للخانة اللي بعدها</div><div class="tw"><table style="font-size:13px;table-layout:fixed"><thead>' +
-        (withSec ? '<tr><th style="border-bottom:none;width:30%"></th>' + secGroups(doms).map(function (gp) { return '<th colspan="' + gp.n + '" style="font-size:11.5px;white-space:normal;line-height:1.2;color:' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + ';border-bottom:2px solid ' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + '">' + esc(gp.key) + '</th>'; }).join('') + '</tr>' : '') +
+      if (!e.gtab) { try { e.gtab = localStorage.getItem('mk_ae_gtab') || ''; } catch (e0) {} if (!e.gtab) e.gtab = window.innerWidth < 700 ? 'content' : 'all'; }
+      var tab = bothG ? e.gtab : 'all', cols = gCols.filter(function (c) { return tab === 'all' || c.g === tab; });
+      var groups = []; cols.forEach(function (c) { var l = groups[groups.length - 1]; if (l && l.key === c.sec) l.n++; else groups.push({ key: c.sec, n: 1, g: c.g }); });
+      var withSec = groups.length > 1 || cols.some(function (c) { return c.doms[0].sec; });
+      var cellDom = function (c, r) { return c.doms.filter(function (dm) { return dFor(dm, r.ql); })[0]; };
+      var scaleTxt = function (S) { return S.min + '–' + S.max + (S.step < 1 ? ' (' + (S.step === 0.5 ? '½' : '¼') + ')' : ''); };
+      return '<div class="panel">' +
+        (bothG ? '<div class="chips" style="margin:0 0 6px">' + [['content', '💡 المحتوى'], ['quran', '📖 القرآن'], ['all', 'الكل']].map(function (t) { return '<button type="button" class="chip' + (tab === t[0] ? ' on' : '') + '" data-gtab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' : '') +
+        '<div class="sub" style="margin:0 0 6px">اكتب الرقم من الكشف • <b>3+</b> = 3 وقريب من اللي بعده (↑) • الكسور زي <b>7.5</b> أو <b>0.25</b> • Tab للخانة اللي بعدها' +
+          (cols.some(function (c) { return c.merged && c.doms.length > 1; }) ? ' • بنود القرآن بتتكتب حسب مستوى كل طالب' : '') + '</div><div class="tw"><table class="ae-grid" style="font-size:13px;table-layout:fixed;min-width:' + (110 + cols.length * 50) + 'px"><thead>' +
+        (withSec ? '<tr><th style="border-bottom:none;width:30%"></th>' + groups.map(function (gp) { return '<th colspan="' + gp.n + '" style="font-size:11.5px;white-space:normal;line-height:1.2;color:' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + ';border-bottom:2px solid ' + (gp.g === 'quran' ? '#2e8b57' : 'var(--c)') + '">' + esc(gp.key) + '</th>'; }).join('') + '</tr>' : '') +
         '<tr><th style="text-align:right;width:30%">الطالب</th>' +
-        doms.map(function (dm) { var S = dS(a, dm); return '<th title="' + esc(dm.desc || '') + '" style="white-space:normal;font-size:11.5px;line-height:1.2">' + esc(dm.name) + '<br><small style="color:var(--m);font-weight:normal">' + S.min + '–' + S.max + (S.step < 1 ? ' (' + (S.step === 0.5 ? '½' : '¼') + ')' : '') + (dm.w !== '' && dm.w != null ? ' • ' + dm.w + 'د' : '') + (dm.ql ? '<br>📖 ' + esc(dm.ql) : '') + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
+        cols.map(function (c) { var dm = c.doms[0], S = dS(a, dm), sc = c.doms.map(function (z) { return scaleTxt(dS(a, z)); }).filter(function (v, i, arr) { return arr.indexOf(v) === i; });
+          return '<th title="' + esc(c.doms.map(function (z) { return (z.ql ? z.ql + ': ' : '') + (z.desc || z.name); }).join(' • ')) + '" style="white-space:normal;word-break:break-word;font-size:11.5px;line-height:1.25;vertical-align:bottom">' + esc(c.name) + '<br><small style="color:var(--m);font-weight:normal" dir="ltr">' + esc(sc.join(' / ')) + (dm.w !== '' && dm.w != null ? ' • ' + dm.w + 'د' : '') + '</small>' +
+            (!c.merged && dm.ql ? '<br><small style="color:var(--m);font-weight:normal">📖 ' + esc(dm.ql) + '</small>' : '') + '</th>'; }).join('') + '</tr></thead><tbody>' +
         d.students.map(function (s) { var r = e.rows[s.code], off = r.att !== 'حاضر';
           return '<tr><td style="text-align:right;white-space:normal;border-bottom:none;padding-bottom:0">' + esc(s.name) + qlPill(s) + ' <span id="gs-' + esc(s.code) + '">' + status(r) + '</span><br>' +
             '<select data-ga="' + esc(s.code) + '" style="width:auto;padding:3px;font-size:12px;margin-top:3px"' + dis + '>' + opts(['حاضر', 'غائب', 'لم يُقيَّم'], r.att) + '</select></td>' +
-            doms.map(function (dm) { if (!dFor(dm, r.ql)) return '<td style="border-bottom:none;padding-bottom:0;color:var(--m);text-align:center" title="مش لمستوى القرآن بتاعه">—</td>';
-              var c = r.data[dm.k] || {}, val = c.v != null ? fmtV(c.v).replace(/[\u2066\u2069]/g, '') + (c.up ? '+' : '') : '';
-              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="' + (dS(a, dm).step < 1 ? 'decimal' : 'numeric') + '" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" style="width:100%;max-width:52px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
-            '<tr><td colspan="' + (doms.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
+            cols.map(function (c) { var dm = cellDom(c, r); if (!dm) return '<td style="border-bottom:none;padding-bottom:0;color:var(--m);text-align:center" title="مش لمستوى القرآن بتاعه">—</td>';
+              var cv = r.data[dm.k] || {}, val = cv.v != null ? String(Number(cv.v)) + (cv.up ? '+' : '') : '';
+              return '<td style="border-bottom:none;padding-bottom:0"><input type="text" inputmode="' + (dS(a, dm).step < 1 ? 'decimal' : 'numeric') + '" autocomplete="off" data-gv="' + esc(s.code) + '|' + esc(dm.k) + '" dir="ltr" value="' + esc(val) + '" title="' + esc(dTitle(dm) + (dm.ql ? ' — ' + dm.ql : '')) + '" style="width:100%;max-width:56px;padding:7px 1px;text-align:center;font-size:16px"' + (off ? ' disabled' : dis) + '></td>'; }).join('') + '</tr>' +
+            '<tr><td colspan="' + (cols.length + 1) + '" style="padding-top:3px"><input type="text" data-gn="' + esc(s.code) + '" value="' + esc(r.note) + '" placeholder="📝 ملاحظة / دليل (اختياري)" style="padding:5px 8px;font-size:13px"' + dis + '></td></tr>'; }).join('') +
         '</tbody></table></div>' +
         '<details class="scl" style="margin-top:8px"><summary>ⓘ معنى الدرجات</summary>' + a.labels.map(function (t, i) { return '<div><b>' + (a.min + i) + '</b>' + esc(t || '—') + '</div>'; }).join('') +
           doms.filter(function (dm) { return (dm.rub || []).some(String) || dm.g === 'quran' || dS(a, dm).own; }).map(function (dm) { var S = dS(a, dm); var vs = []; for (var v = S.min; v <= S.max; v++) vs.push(v);
-            return '<div style="margin-top:6px"><b style="width:auto;color:var(--c)">' + esc(dTitle(dm)) + '</b>' + vs.map(function (v) { return '<div><b>' + v + '</b>' + esc(rubTxt(dm, v)) + '</div>'; }).join('') + '</div>'; }).join('') + '</details></div>';
+            return '<div style="margin-top:6px"><b style="width:auto;color:var(--c)">' + esc(dTitle(dm)) + (dm.ql ? ' (' + esc(dm.ql) + ')' : '') + '</b>' + vs.map(function (v) { return '<div><b>' + v + '</b>' + esc(rubTxt(dm, v)) + '</div>'; }).join('') + '</div>'; }).join('') + '</details></div>';
     };
     var cardsHTML = function () {
       var e = ST.ae;
@@ -1910,6 +1930,7 @@ function asmtEntry(id, cls, back) {
     mm.onclick = function (ev) {
       var b = ev.target.closest('[data-x]'), e = ST.ae, md;
       if (ev.target.closest('[data-b]')) { if (ST.aeBack) ST.aeBack(); else asmtHome(); return; }
+      if ((md = ev.target.closest('[data-gtab]'))) { e.gtab = md.dataset.gtab; try { localStorage.setItem('mk_ae_gtab', e.gtab); } catch (e1) {} draw(); return; }   // v5.40
       if ((md = ev.target.closest('[data-mode]'))) { e.mode = md.dataset.mode; try { localStorage.setItem('mk_ae_mode', e.mode); } catch (e1) {} draw(); return; }
       if (b && !b.disabled) {
         var r = e.rows[b.dataset.s], k = b.dataset.k, act = b.dataset.x;
