@@ -2020,7 +2020,8 @@ function meetHome() {
   call('meetHome', [ME.code], function (d) {
     ST.mh = d;
     var h = '<div class="panel"><div class="row"><h3 style="margin:0">🗓️ حضور المربين</h3>' + (d.canEdit ? '<button class="btn sm" type="button" data-mn="1" style="flex:0 0 auto">➕ سجّل اجتماع</button>' : '') + '</div>' +
-      '<div class="sub">المقرأة، ميتينج الـ Lesson Plan، التدريبات وأي اجتماع تاني — مين حضر ومين لأ. اضغط على اسم المربي علشان تفتح ملفه.</div></div>';
+      '<div class="sub">المقرأة، ميتينج الـ Lesson Plan، التدريبات وأي اجتماع تاني — مين حضر ومين لأ. اضغط على اسم المربي علشان تفتح ملفه.</div>' +
+      (d.canKpi ? '<button class="btn sec" type="button" data-kpi="1" style="margin-top:8px">📊 KPIs المربين (الشهر / الترم)</button>' : '') + '</div>';   // v5.42
     h += '<div class="panel"><h3>👥 المربين</h3>' + (d.summary.length ? '<div class="tw"><table style="table-layout:fixed;min-width:' + (120 + d.kinds.length * 54) + 'px"><thead><tr><th style="width:120px;text-align:right">المربي</th>' + d.kinds.map(function (k) { return '<th style="white-space:normal;font-size:11.5px;line-height:1.25;vertical-align:bottom">' + esc(k) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       d.summary.map(function (c) { return '<tr><td style="text-align:right;white-space:normal;word-break:break-word"><a href="#" data-cp="' + esc(c.code) + '">👤 ' + esc(c.name) + '</a>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') + '</td>' + d.kinds.map(function (k) { var x = c.kinds[k];
         return '<td>' + (x ? '<b class="' + (x.yes === x.total ? 's5' : x.yes ? 's3' : 's1') + '">' + x.yes + '/' + x.total + '</b>' + (x.excused ? '<br><small>اعتذر ' + x.excused + '</small>' : '') : '—') + '</td>'; }).join('') + '</tr>'; }).join('') +
@@ -2030,9 +2031,44 @@ function meetHome() {
     main(h);
     $('main').onclick = function (e) { var b;
       if (e.target.closest('[data-mn]')) { meetForm(null); return; }
+      if (e.target.closest('[data-kpi]')) { kpiView(ST.kpiP || 'term'); return; }
       if ((b = e.target.closest('[data-cp]'))) { e.preventDefault(); coachProfileView(b.dataset.cp); return; }
       if ((b = e.target.closest('[data-mo]'))) { loading(); call('meetGet', [ME.code, b.dataset.mo], function (m) { meetForm(m); }, function (er) { failed(er); meetHome(); }); } };
   });
+}
+// v5.42: 📊 KPIs المربين — درجة من 100 لكل مربي (للمنسق والإدارة بس)
+var MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+function kpiView(period) {
+  loading(); ST.kpiP = period;
+  call('coachKpis', [ME.code, period], function (d) {
+    ST.kpi = d;
+    var col = function (v) { return v == null ? 'var(--m)' : v >= d.green ? '#2e8b57' : v >= d.yellow ? '#c98a00' : '#c0392b'; };
+    var mName = function (p) { var q = p.split('-'); return MONTHS_AR[Number(q[1]) - 1] + ' ' + q[0]; };
+    var h = '<button class="back" type="button" data-kb="1">→ رجوع للمربين</button><div class="panel"><h3>📊 KPIs المربين</h3>' +
+      '<div class="chips" style="margin:6px 0">' + [['term', 'الترم كله']].concat(d.months.slice().reverse().map(function (p) { return [p, mName(p)]; })).map(function (x) {
+        return '<button type="button" class="chip' + (d.period === x[0] ? ' on' : '') + '" data-kp="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="sub">الدرجة من 100 = متوسط موزون للبنود اللي ليها بيانات في الفترة دي' + (d.penalty ? '، وبيتخصم ' + d.penalty + ' عن كل إنذار' : '') + '. ' +
+        '🟢 ' + d.green + '+ • 🟡 ' + d.yellow + '–' + (d.green - 1) + ' • 🔴 أقل من ' + d.yellow + '. الأوزان: ' + d.defs.map(function (x) { return x.name + ' ' + x.w + '%'; }).join('، ') + ' — بتتغير من «الإعدادات». <b>المربي ما بيشوفش الصفحة دي.</b></div>' +
+      '<button class="btn sm ghost" type="button" data-kx="1" style="width:auto;margin-top:6px">⬇️ Excel</button></div>';
+    h += d.list.length ? d.list.map(function (c) {
+      return '<div class="panel" style="padding:12px"><div class="row" style="align-items:center"><div><b>' + esc(c.name) + '</b>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') + '</div>' +
+        '<div style="flex:0 0 auto;text-align:center;font-size:30px;font-weight:900;color:' + col(c.score) + '">' + (c.score == null ? '—' : c.score) + '<div style="font-size:11px;font-weight:normal;color:var(--m)">من 100</div></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">' + d.defs.map(function (x) { var v = c.kpi[x.key];
+          return '<div style="border:1px solid #e3e8ee;border-radius:10px;padding:6px 8px"><div style="font-size:12px;color:var(--m)">' + esc(x.name) + '</div><b style="color:' + col(v) + '">' + (v == null ? '—' : v + '%') + '</b>' +
+            (c.info[x.key] ? '<div style="font-size:11px;color:var(--m);line-height:1.3">' + esc(c.info[x.key]) + '</div>' : '') + '</div>'; }).join('') + '</div>' +
+        (c.warns ? '<div class="sub" style="color:#c0392b;margin-top:6px">⚠️ ' + c.warns + ' إنذار في الفترة (−' + c.warns * d.penalty + ')</div>' : '') +
+        '<a href="#" data-cp="' + esc(c.code) + '" style="font-size:13px">👤 ملف المربي</a></div>'; }).join('') : '<div class="panel"><div class="empty">مفيش مربين في نطاقك.</div></div>';
+    main(h);
+    $('main').onclick = function (e) { var b;
+      if (e.target.closest('[data-kb]')) { meetHome(); return; }
+      if ((b = e.target.closest('[data-kp]'))) { kpiView(b.dataset.kp); return; }
+      if ((b = e.target.closest('[data-cp]'))) { e.preventDefault(); coachProfileView(b.dataset.cp); return; }
+      if (e.target.closest('[data-kx]')) { loadXlsx().then(function (X) {
+        var rows = d.list.map(function (c) { var o = { 'المربي': c.name, 'المجموعات': c.cls, 'الدرجة': c.score == null ? '' : c.score };
+          d.defs.forEach(function (x) { o[x.name + ' %'] = c.kpi[x.key] == null ? '' : c.kpi[x.key]; o[x.name + ' — تفاصيل'] = c.info[x.key] || ''; }); o['الإنذارات'] = c.warns; return o; });
+        var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, X.utils.json_to_sheet(rows), 'KPIs');
+        X.writeFile(wb, 'KPIs المربين - ' + (d.period === 'term' ? 'الترم' : d.period) + '.xlsx'); }, failed); } };
+  }, failed);
 }
 // v5.24: 👤 ملف المربي — كل حاجة عنه في مكان واحد
 function coachProfileView(code) {
