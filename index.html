@@ -2049,9 +2049,19 @@ function kpiView(period) {
         return '<button type="button" class="chip' + (d.period === x[0] ? ' on' : '') + '" data-kp="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
       '<div class="sub">الدرجة من 100 = متوسط موزون للبنود اللي ليها بيانات في الفترة دي' + (d.penalty ? '، وبيتخصم ' + d.penalty + ' عن كل إنذار' : '') + '. ' +
         '🟢 ' + d.green + '+ • 🟡 ' + d.yellow + '–' + (d.green - 1) + ' • 🔴 أقل من ' + d.yellow + '. الأوزان: ' + d.defs.map(function (x) { return x.name + ' ' + x.w + '%'; }).join('، ') + ' — بتتغير من «الإعدادات». <b>المربي ما بيشوفش الصفحة دي.</b></div>' +
+      '<details class="scl" style="margin-top:8px"><summary>ⓘ كل بند بيتحسب إزاي؟</summary>' +   // v5.44
+        '<div><b style="width:auto">تسجيل الحلقات وتقييمها</b> كل حلقة اتسجلت في ميعادها = درجة كاملة، متأخرة = نص، فائتة أو ما اتسجلتش = صفر. ده تقييم الطلاب الأسبوعي في كل حلقة.</div>' +
+        '<div><b style="width:auto">تقييم الميد / الفاينال</b> التقييمات اللي بتتعمل من «📝 التقييمات» (لحد دلوقتي تقييم منتصف الترم بس) — اتسلّم قبل الـ deadline ولا لأ.</div>' +
+        '<div><b style="width:auto">مهام الحلقة</b> النيوزليتر ولينكات المراجعة اللي المنسق علّم عليها «اتبعت» ÷ اللي راجعها.</div>' +
+        '<div><b style="width:auto">الاجتماعات</b> حضر ÷ (حضر + غاب). الاعتذار ما بيتحسبش عليه.</div>' +
+        '<div><b style="width:auto">الزيارات الصفية</b> متوسط الزيارات ÷ 5. <b style="width:auto">تقييم المنسق</b> متوسط التقييمات ÷ 4.</div>' +
+        '<div><b style="width:auto">حضور الطلاب</b> حضور طلاب مجموعته في الحلقات ÷ (حضور + غياب).</div>' +
+        '<div><b style="width:auto">مربي أساسي + مساعد</b> المجموعة فريق واحد: الحلقات والتقييمات والمهام وحضور الطلاب والزيارات بتتحسب للمجموعة كلها وتتحط للاتنين بنفس الرقم، أيًا كان مين اللي سجّل. الاجتماعات وتقييم المنسق والإنذارات لكل واحد لوحده.</div>' +
+        '<div><b style="width:auto">الدرجة</b> كل بند × وزنه ÷ مجموع أوزان البنود اللي ليها بيانات. البند اللي مالوش بيانات في الفترة بيتشال ووزنه يتوزع على الباقي.</div></details>' +
       '<button class="btn sm ghost" type="button" data-kx="1" style="width:auto;margin-top:6px">⬇️ Excel</button></div>';
     h += d.list.length ? d.list.map(function (c) {
-      return '<div class="panel" style="padding:12px"><div class="row" style="align-items:center"><div><b>' + esc(c.name) + '</b>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') + '</div>' +
+      return '<div class="panel" style="padding:12px"><div class="row" style="align-items:center"><div><b>' + esc(c.name) + '</b>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') +
+        ((c.partners || []).length ? '<br><small style="color:var(--c)">👥 مع ' + esc(c.partners.join('، ')) + ' — بنود المجموعة واحدة للاتنين</small>' : '') + '</div>' +
         '<div style="flex:0 0 auto;text-align:center;font-size:30px;font-weight:900;color:' + col(c.score) + '">' + (c.score == null ? '—' : c.score) + '<div style="font-size:11px;font-weight:normal;color:var(--m)">من 100</div></div></div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">' + d.defs.map(function (x) { var v = c.kpi[x.key];
           return '<div style="border:1px solid #e3e8ee;border-radius:10px;padding:6px 8px"><div style="font-size:12px;color:var(--m)">' + esc(x.name) + '</div><b style="color:' + col(v) + '">' + (v == null ? '—' : v + '%') + '</b>' +
