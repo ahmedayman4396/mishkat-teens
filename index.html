@@ -873,6 +873,7 @@ function qualityTabs(cur) {
 function mLine(m) {
   var w = m.warnsByLevel || {};
   return '<div class="line"><span class="pill">' + m.groups + ' مجموعة • ' + m.coaches + ' مربي</span><span class="pill ' + (m.notVisited.length ? 'wait' : 'ok') + '">🏫 ' + m.visits + ' زيارة' + (m.notVisited.length ? ' • ' + m.notVisited.length + ' ما اتزارتش' : '') + '</span>' +
+    ((m.notEvaluated || []).length ? '<span class="pill wait">📝 ' + m.notEvaluated.length + ' مربي محتاج تقييم منسق</span>' : '') +   // v5.45
     '<span class="pill ' + (m.missing ? 'wait' : 'ok') + '">📋 ' + (m.onTimePct == null ? 'لسه مفيش حلقات متسجلة' : m.onTimePct + '% من الحلقات في ميعادها') + (m.missing ? ' • ' + m.missing + ' حلقة ناقصة' : '') + '</span>' +
     (m.tasksOpen ? '<span class="pill wait">📋 ' + m.tasksOpen + ' حلقة مهامها ما اتراجعتش في ميعادها</span>' : '') +
     '<span class="pill">⚠️ ' + m.warns + (m.warns ? ' (' + Object.keys(w).filter(function (k) { return w[k]; }).map(function (k) { return k + ' ' + w[k]; }).join('، ') + ')' : '') + '</span>' +
@@ -902,6 +903,7 @@ function coordDetailView(code) {
     ST.cdd = d;
     var h = (d.self ? '<button class="back" type="button" data-cb="1">→ رجوع</button>' : '<button class="back" type="button" data-cb="1">→ رجوع للمنسقين</button>') +
       '<div class="panel"><h3>👤 ' + esc(d.name) + '</h3>' + mLine(d.m) + (d.m.notVisited.length ? '<div class="sub">ما اتزارتش: ' + esc(d.m.notVisited.join('، ')) + '</div>' : '') +
+      ((d.m.notEvaluated || []).length ? '<div class="sub">محتاجين تقييم منسق: ' + esc(d.m.notEvaluated.join('، ')) + '</div>' : '') +
       (d.canEval ? '<button class="btn" type="button" data-ce="1" style="margin-top:8px">📝 تقييم جديد للمنسق</button>' : '') + '</div><div id="cebox"></div>';
     h += '<div class="panel"><h3>📝 تقييمات الجودة (' + d.evals.length + ')</h3>' + (d.evals.length ? d.evals.map(function (v, i) {
       return '<div class="cls ok" data-ev="' + i + '"><h4>' + esc(v.time.slice(0, 10)) + ' — متوسط ' + esc(v.avg) + ' من 4</h4><div class="m">' + esc(v.by) + (v.from || v.to ? ' • الفترة ' + esc(v.from || '…') + ' ← ' + esc(v.to || '…') : '') + '</div></div>'; }).join('') : '<div class="empty">لسه مفيش.</div>') + '</div>';
@@ -2059,6 +2061,11 @@ function kpiView(period) {
         '<div><b style="width:auto">مربي أساسي + مساعد</b> المجموعة فريق واحد: الحلقات والتقييمات والمهام وحضور الطلاب والزيارات بتتحسب للمجموعة كلها وتتحط للاتنين بنفس الرقم، أيًا كان مين اللي سجّل. الاجتماعات وتقييم المنسق والإنذارات لكل واحد لوحده.</div>' +
         '<div><b style="width:auto">الدرجة</b> كل بند × وزنه ÷ مجموع أوزان البنود اللي ليها بيانات. البند اللي مالوش بيانات في الفترة بيتشال ووزنه يتوزع على الباقي.</div></details>' +
       '<button class="btn sm ghost" type="button" data-kx="1" style="width:auto;margin-top:6px">⬇️ Excel</button></div>';
+    var ne = d.list.filter(function (c) { return c.evalDue; }), nv = d.list.filter(function (c) { return c.visitDue; });   // v5.45
+    if (ne.length || nv.length) h += '<div class="panel" style="border-right:4px solid #c98a00"><b>⏰ مطلوب علشان الأرقام تبقى عادلة</b>' +
+      (ne.length ? '<div class="sub">📝 محتاجين تقييم منسق (كل ' + d.evalWeeks + ' أسابيع): ' + esc(ne.map(function (c) { return c.name; }).join('، ')) + '</div>' : '') +
+      (nv.length ? '<div class="sub">🏫 مجموعاتهم محتاجة زيارة صفية (كل ' + d.visitWeeks + ' أسابيع): ' + esc(nv.map(function (c) { return c.name; }).join('، ')) + '</div>' : '') +
+      '<div class="sub">تقييم المنسق والزيارة ' + d.defs.filter(function (x) { return x.key === 'eval' || x.key === 'visit'; }).reduce(function (a2, x) { return a2 + x.w; }, 0) + '% من الدرجة — المربي اللي ما اتعملوش ليه درجته بتطلع من البنود التانية بس.</div></div>';
     h += d.list.length ? d.list.map(function (c) {
       return '<div class="panel" style="padding:12px"><div class="row" style="align-items:center"><div><b>' + esc(c.name) + '</b>' + (c.cls ? '<br><small style="color:var(--m)">' + esc(c.cls) + '</small>' : '') +
         ((c.partners || []).length ? '<br><small style="color:var(--c)">👥 مع ' + esc(c.partners.join('، ')) + ' — بنود المجموعة واحدة للاتنين</small>' : '') + '</div>' +
