@@ -760,8 +760,11 @@ function followClass(cls) {
         call('moveStudent', [ME.code, cls, b.dataset.c, $('mv-to').value, $('mv-n').value], function (r) { Sound.play('ok'); toast('اتنقل لـ ' + r.to + ' من ح' + r.from + ' ✅'); followClass(cls); }, function (er) { busy(b); failed(er); }); }
       else if (a === 'wnew') warnForm(cls, b.dataset.c);
       else if (a === 'sbsave') { var sn = $('sb-n').value, sc = $('sb-c').value; if (!sn || !sc) { toast('اختار الحلقة والمربي'); return; } busy(b, '⏳');
-        call('assignSub', [ME.code, cls, sn, sc, $('sb-r').value], function () { busy(b); Sound.play('ok'); toast('اتحدد البديل ✅'); subBox(cls); }, function (er) { busy(b); failed(er); }); }
+        call('assignSub', [ME.code, cls, sn, sc, $('sb-r').value, $('sb-w') ? $('sb-w').value : ''], function () { busy(b); Sound.play('ok'); toast('اتحدد البديل ✅'); subBox(cls); }, function (er) { busy(b); failed(er); }); }
       else if (a === 'sbx') call('cancelSub', [ME.code, b.dataset.id], function () { toast('اتلغى'); subBox(cls); });
+      else if (a === 'apsave') { var an = $('ap-n').value, ac = $('ap-c').value, ak = $('ap-k').value; if (!an || !ac || !ak) { toast('اختار الحلقة والمربي والنوع'); return; } busy(b, '⏳');   // v5.46
+        call('saveApology', [ME.code, cls, an, ac, ak, $('ap-r').value], function () { busy(b); Sound.play('ok'); toast('اتسجل الاعتذار ✅'); subBox(cls); }, function (er) { busy(b); failed(er); }); }
+      else if (a === 'apx') { if (!confirm('إلغاء الاعتذار ده؟')) return; call('cancelApology', [ME.code, b.dataset.id], function () { toast('اتلغى'); subBox(cls); }); }
       else if (a === 'wcancel') { var why = prompt('سبب إلغاء الإنذار؟'); if (why == null) return; call('cancelWarn', [ME.code, b.dataset.id, why], function () { toast('اتلغى'); warnBox(cls); }); }
       else if (a === 'wsave') saveWarnForm(cls, b);
       else if (a === 'wlv') { [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle('on', x === b); }); }
@@ -849,10 +852,23 @@ function subBox(cls) {
     if (d.canAssign) {
       var ns = []; for (var i = 1; i <= d.sessions; i++) if (done[i] !== 'done' && done[i] !== 'cancelled' && done[i] !== 'before') ns.push({ v: i, l: 'حلقة ' + i });
       h += '<div class="row" style="margin-top:8px"><div class="f"><select id="sb-n">' + opts(ns, '', 'الحلقة') + '</select></div><div class="f"><select id="sb-c">' + opts(d.coaches.map(function (x) { return { v: x.code, l: x.name + (x.branch ? ' (' + x.branch + ')' : '') }; }), '', 'المربي البديل (أي فرع)') + '</select></div></div>' +
+        ((d.staff || []).length > 1 ? '<div class="f"><select id="sb-w">' + opts(d.staff.map(function (x) { return { v: x.code, l: 'اللي اعتذر: ' + x.name }; }), d.staff[0].code) + '</select></div>' : '') +
         '<div class="f"><input type="text" id="sb-r" placeholder="السبب (اختياري) — زي: إجازة، ظرف"></div><button class="btn sm" type="button" data-a="sbsave">🔁 حدد البديل</button>' +
-        '<div class="sub">البديل هيلاقي الحلقة في «مجموعاتي» ويسجّلها، والحلقة بتتسجل باسمه ومكتوب عليها «بديل».</div>';
+        '<div class="sub">البديل هيلاقي الحلقة في «مجموعاتي» ويسجّلها، والحلقة بتتسجل باسمه ومكتوب عليها «بديل». تحديد البديل بيتسجل «اعتذار» على مربي المجموعة.</div>';
     }
-    el.innerHTML = h;
+    // v5.46: 🙋 اعتذارات المربين (بتتخصم من KPIs — الأونلاين بدل الحضور نص اعتذار)
+    h += '<div style="margin-top:12px;border-top:1px dashed #d6dde5;padding-top:10px"><b>🙋 اعتذارات المربين</b>' +
+      ((d.apols || []).length ? (d.apols || []).map(function (x) { return '<div class="ur"><span><b>حلقة ' + x.session + ' — ' + esc(x.coachName) + '</b> <span class="pill ' + (x.kind === 'أونلاين بدل الحضور' ? 'wait' : 'bad') + '">' + esc(x.kind) + '</span> <small style="color:var(--m)">' + esc(x.by) + (x.reason ? ' • ' + esc(x.reason) : '') + '</small></span>' +
+        (d.canAssign && !x.sub ? '<button class="btn ghost" type="button" data-a="apx" data-id="' + esc(x.id) + '">إلغاء</button>' : '') + '</div>'; }).join('') : '<div class="empty" style="padding:6px">مفيش اعتذارات.</div>');
+    if (d.canAssign && (d.kinds || []).length) {
+      var na = []; for (var j = 1; j <= d.sessions; j++) if (done[j] !== 'cancelled' && done[j] !== 'before') na.push({ v: j, l: 'حلقة ' + j });
+      h += '<div class="sub" style="margin-top:6px">اعتذار من غير بديل:</div><div class="row"><div class="f"><select id="ap-n">' + opts(na, '', 'الحلقة') + '</select></div>' +
+        '<div class="f"><select id="ap-c">' + opts(d.staff.map(function (x) { return { v: x.code, l: x.name }; }), d.staff.length === 1 ? d.staff[0].code : '', 'المربي') + '</select></div>' +
+        '<div class="f"><select id="ap-k">' + opts(d.kinds, d.kinds.length === 1 ? d.kinds[0] : '', 'النوع') + '</select></div></div>' +
+        '<div class="f"><input type="text" id="ap-r" placeholder="السبب (اختياري)"></div><button class="btn sm sec" type="button" data-a="apsave">🙋 سجّل الاعتذار</button>' +
+        '<div class="sub">كل اعتذار بيخصم من KPIs المربي، و«أونلاين بدل الحضور» بيتحسب نص اعتذار. اعتذار البديل بيتلغي لوحده لو البديل اتلغى.</div>';
+    }
+    el.innerHTML = h + '</div>';
   });
 }
 // المربي: تنبيهاتي
@@ -2059,6 +2075,7 @@ function kpiView(period) {
         '<div><b style="width:auto">الزيارات الصفية</b> متوسط الزيارات ÷ 5. <b style="width:auto">تقييم المنسق</b> متوسط التقييمات ÷ 4.</div>' +
         '<div><b style="width:auto">حضور الطلاب</b> حضور طلاب مجموعته في الحلقات ÷ (حضور + غياب).</div>' +
         '<div><b style="width:auto">مربي أساسي + مساعد</b> المجموعة فريق واحد: الحلقات والتقييمات والمهام وحضور الطلاب والزيارات بتتحسب للمجموعة كلها وتتحط للاتنين بنفس الرقم، أيًا كان مين اللي سجّل. الاجتماعات وتقييم المنسق والإنذارات لكل واحد لوحده.</div>' +
+        '<div><b style="width:auto">الاعتذارات</b> كل اعتذار عن حلقة (نزل بديل، أو المساعد غطّى لوحده) بيخصم ' + d.apolPenalty + ' درجات، و«أونلاين بدل الحضور» نصهم — بتتسجل من صفحة المجموعة.</div>' +
         '<div><b style="width:auto">الدرجة</b> كل بند × وزنه ÷ مجموع أوزان البنود اللي ليها بيانات. البند اللي مالوش بيانات في الفترة بيتشال ووزنه يتوزع على الباقي.</div></details>' +
       '<button class="btn sm ghost" type="button" data-kx="1" style="width:auto;margin-top:6px">⬇️ Excel</button></div>';
     var ne = d.list.filter(function (c) { return c.evalDue; }), nv = d.list.filter(function (c) { return c.visitDue; });   // v5.45
@@ -2074,6 +2091,7 @@ function kpiView(period) {
           return '<div style="border:1px solid #e3e8ee;border-radius:10px;padding:6px 8px"><div style="font-size:12px;color:var(--m)">' + esc(x.name) + '</div><b style="color:' + col(v) + '">' + (v == null ? '—' : v + '%') + '</b>' +
             (c.info[x.key] ? '<div style="font-size:11px;color:var(--m);line-height:1.3">' + esc(c.info[x.key]) + '</div>' : '') + '</div>'; }).join('') + '</div>' +
         (c.warns ? '<div class="sub" style="color:#c0392b;margin-top:6px">⚠️ ' + c.warns + ' إنذار في الفترة (−' + c.warns * d.penalty + ')</div>' : '') +
+        (c.apol ? '<div class="sub" style="color:#c0392b;margin-top:6px">🙋 ' + esc(c.info.apol) + ' في الفترة (−' + Math.round(c.apolW * d.apolPenalty * 10) / 10 + ')</div>' : '') +   // v5.46
         '<a href="#" data-cp="' + esc(c.code) + '" style="font-size:13px">👤 ملف المربي</a></div>'; }).join('') : '<div class="panel"><div class="empty">مفيش مربين في نطاقك.</div></div>';
     main(h);
     $('main').onclick = function (e) { var b;
@@ -2082,7 +2100,7 @@ function kpiView(period) {
       if ((b = e.target.closest('[data-cp]'))) { e.preventDefault(); coachProfileView(b.dataset.cp); return; }
       if (e.target.closest('[data-kx]')) { loadXlsx().then(function (X) {
         var rows = d.list.map(function (c) { var o = { 'المربي': c.name, 'المجموعات': c.cls, 'الدرجة': c.score == null ? '' : c.score };
-          d.defs.forEach(function (x) { o[x.name + ' %'] = c.kpi[x.key] == null ? '' : c.kpi[x.key]; o[x.name + ' — تفاصيل'] = c.info[x.key] || ''; }); o['الإنذارات'] = c.warns; return o; });
+          d.defs.forEach(function (x) { o[x.name + ' %'] = c.kpi[x.key] == null ? '' : c.kpi[x.key]; o[x.name + ' — تفاصيل'] = c.info[x.key] || ''; }); o['الإنذارات'] = c.warns; o['الاعتذارات'] = c.apol || 0; return o; });
         var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, X.utils.json_to_sheet(rows), 'KPIs');
         X.writeFile(wb, 'KPIs المربين - ' + (d.period === 'term' ? 'الترم' : d.period) + '.xlsx'); }, failed); } };
   }, failed);
